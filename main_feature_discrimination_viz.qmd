@@ -1,0 +1,169 @@
+---
+title: "Data Cleaning"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+```{python}
+import pandas as pd
+
+import importlib
+import src.data_analysis.feature_discrimination_plots as utils
+
+importlib.reload(utils)
+from src.data_analysis.feature_discrimination_plots import plot_continuous_vs_categorical, contingency_analysis, plot_grouped_bar
+
+```
+
+```{python}
+# Impoort data from datasets
+path_datasets = "/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/datasets"
+```
+
+```{python}
+# Import data from datasets
+train_imputed = pd.read_csv(f"{path_datasets}/train_imputed.csv")
+test_imputed = pd.read_csv(f"{path_datasets}/test_imputed.csv")
+oot_imputed = pd.read_csv(f"{path_datasets}/oot_imputed.csv")
+```
+
+
+
+
+
+```{python}
+plot_continuous_vs_categorical(
+    df=train_imputed,
+    continuous_var="person_income",
+    categorical_var="def",
+    category_labels={0: "No Default", 1: "Default"},
+    figsize=(14, 12),
+    sample=5000
+)
+```
+
+```{python}
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy.stats import chi2_contingency
+
+
+```
+
+```{python}
+results = contingency_analysis(
+     df=train_imputed,
+    var1="def",
+    var2="person_home_ownership",
+    normalize=None   # très utile en scoring
+)
+```
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from scipy.stats import chi2_contingency
+
+# ── 1. Tableau de contingence ────────────────────────────────────────────────
+contingency = pd.crosstab(
+    train_imputed["person_home_ownership"],
+    train_imputed["def"],
+    margins=True
+)
+print("=== Tableau de contingence (effectifs) ===")
+print(contingency)
+
+# ── 2. Tableau des fréquences relatives (normalisé par ligne) ────────────────
+contingency_norm = pd.crosstab(
+    train_imputed["person_home_ownership"],
+    train_imputed["def"],
+    normalize="index"
+).round(3) * 100
+print("\n=== Taux de défaut par modalité (%) ===")
+print(contingency_norm)
+
+# ── 3. Test du Chi² ──────────────────────────────────────────────────────────
+ct = pd.crosstab(train_imputed["person_home_ownership"], train_imputed["def"])
+chi2, p_value, dof, expected = chi2_contingency(ct)
+
+n = ct.values.sum()
+cramers_v = np.sqrt(chi2 / (n * (min(ct.shape) - 1)))
+
+print(f"\n=== Test du Chi² ===")
+print(f"Chi²      : {chi2:.4f}")
+print(f"p-value   : {p_value:.4f}")
+print(f"Degrés lib: {dof}")
+print(f"V de Cramér: {cramers_v:.4f}")
+
+if p_value < 0.05:
+    print("→ Liaison statistiquement significative (p < 0.05)")
+else:
+    print("→ Pas de liaison significative (p ≥ 0.05)")
+
+# ── 4. Interprétation du V de Cramér ────────────────────────────────────────
+if cramers_v < 0.10:
+    strength = "très faible"
+elif cramers_v < 0.20:
+    strength = "faible"
+elif cramers_v < 0.30:
+    strength = "modérée"
+else:
+    strength = "forte"
+print(f"→ Force de la liaison : {strength} (V = {cramers_v:.3f})")
+
+# ── 5. Visualisation (principes de Cole) ────────────────────────────────────
+
+
+plot_grouped_bar(
+    df=train_imputed,
+    cat_var="def",
+    subcat_var="person_home_ownership",
+    normalize="index",
+    title="Default Rate by Home Ownership"
+)
+```
+
+
+```{python}
+print(train_imputed.dtypes)
+continuous_vars = [
+    "person_income",
+    "person_age",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+    "cb_person_cred_hist_length"
+]
+
+qualitative_vars = [
+    "person_home_ownership",
+    "cb_person_default_on_file",
+    "loan_intent",
+    "loan_grade",
+]
+```
+
+
+

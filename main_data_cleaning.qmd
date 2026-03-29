@@ -1,0 +1,337 @@
+---
+title: "Data Cleaning"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+```{python}
+import pandas as pd
+
+import importlib
+import src.data_cleaning as utils
+
+importlib.reload(utils)
+from src.data_cleaning import build_distribution_summary, build_bounds_table, apply_iqr_bounds, impute_missing_values
+from config import data_path, src_path, data_output_path
+
+```
+
+# Création de la variable def_year qui est la concaténation de la variable def et de la variable year.
+
+```{python}
+# Impoort data from datasets
+path_datasets = data_path
+data_cleaning_output_path = data_output_path
+
+train_test_df = pd.read_csv(f"{path_datasets}/train_test_data.csv")
+oot_df = pd.read_csv(f"{path_datasets}/oot_data.csv")
+train_test_df["def_year"] = train_test_df["def"].astype(str) + "_" + train_test_df["year"].astype(str)
+```
+
+# Distribution de la variable def_year.
+
+```{python}
+train_test_df["def_year"].value_counts()
+```
+
+# Valeurs manquantes dans la base
+
+```{python}
+missing_values = train_test_df.isnull().sum()
+print(missing_values)
+```
+
+# Transformation de la base de données train_test_df en données d'entraînement et de test, avec stratification sur la variable def_year.
+
+```{python}
+
+from sklearn.model_selection import train_test_split
+train_df, test_df = train_test_split(train_test_df, test_size=0.2, random_state=42, stratify=train_test_df["def_year"])
+
+# sauvegarde des bases
+train_df.to_csv(f"{path_datasets}/train_data.csv", index=False)
+test_df.to_csv(f"{path_datasets}/test_data.csv", index=False)
+```
+
+
+
+```{python}
+datasets = {
+    "Train": train_df,
+    "Test": test_df,
+    "OOT": oot_df
+}
+summary = build_distribution_summary(datasets)
+print(summary)
+
+summary.to_excel(f"{data_cleaning_output_path}/dataset_default_distribution.xlsx", index=False)
+
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# List of variables to plot
+variables = [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+]
+
+# Define grid size (3 rows × 2 columns like in your figure)
+n_rows, n_cols = 3, 2
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 10))
+axes = axes.flatten()
+
+for i, var in enumerate(variables):
+    
+    sns.boxplot(
+        data=train_df,
+        x=var,
+        ax=axes[i],
+        color="skyblue"
+    )
+    
+    axes[i].set_title(f"Boxplot of {var}")
+
+# Remove unused axes if needed
+for j in range(len(variables), len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+```
+
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+# List of variables to plot
+variables = [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+]
+n_cols = 2
+n_rows = int(np.ceil(len(variables) / n_cols))
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 4*n_rows))
+axes = axes.flatten()
+
+for ax, var in zip(axes, variables):
+    
+    sns.kdeplot(
+        data=train_df,
+        x=var,
+        ax=ax,
+        fill=True
+    )
+    
+    ax.set_title(f"Density plot of {var}")
+
+# Supprimer les axes inutilisés
+for ax in axes[len(variables):]:
+    fig.delaxes(ax)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+
+```{python}
+bounds_table = build_bounds_table(train_df[variables])
+
+print(bounds_table)
+# sauvegarde de la table des bornes en Excel
+bounds_table.to_excel(f"{data_cleaning_output_path}/bounds_table.xlsx", index=False)
+
+```
+
+
+```{python}
+bounds_table, train_clean_outlier, test_clean_outlier, oot_clean_outlier = apply_iqr_bounds(
+    train_df,
+    test_df,
+    oot_df,
+    variables
+)
+```
+
+## Winsorisation de la variable person_age.
+
+Affichons les quantiles de la variable person_age dans la base train de niveau 90%, 95%, 99%, et 99.5%.
+
+```{python}
+quantiles = [0.90, 0.95, 0.99, 0.995]
+age_quantiles = train_df["person_age"].quantile(quantiles)
+print(age_quantiles)
+``` 
+
+
+
+# Valeurs manquantes dans la base train clean outlier
+
+```{python}
+missing_table = (
+    train_clean_outlier
+    .isnull()
+    .agg(['sum', 'mean'])
+    .T
+    .rename(columns={'sum': 'missing_count', 'mean': 'missing_percentage'})
+)
+
+missing_table['missing_percentage'] = missing_table['missing_percentage']
+
+print(missing_table)
+
+# sauvegarde de la table des valeurs manquantes en Excel
+missing_table.to_excel(f"{data_cleaning_output_path}/missing_values_table.xlsx", index=True)
+```
+
+
+# Création de variables indicatrices pour les valeurs manquantes
+
+```{python}
+# Identify variables with missing values
+missing_vars = train_clean_outlier.columns[train_clean_outlier.isnull().any()]
+
+# Create indicator variables for missing values
+for var in missing_vars:
+    train_clean_outlier[f"{var}_missing"] = train_clean_outlier[var].isnull().astype(int)
+
+# Check the new variables
+train_clean_outlier[[f"{var}_missing" for var in missing_vars]].head()
+```
+
+```{python}
+train_clean_outlier.head()
+```
+
+
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+variables = [
+    "person_age",
+    "person_income",
+    "loan_amnt",
+    "loan_percent_income",
+    "person_emp_length",
+    "loan_int_rate",
+]
+
+n_rows, n_cols = 3, 2
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 10))
+axes = axes.flatten()
+
+for ax, var in zip(axes, variables):
+    
+    sns.boxplot(
+        data=train_clean_outlier,
+        x="loan_int_rate_missing",
+        y=var,
+        hue="loan_int_rate_missing",
+        ax=ax,
+        palette="Set2",
+        legend=False
+    )
+    
+    ax.set_title(f"{var} by loan_int_rate_missing")
+    ax.set_xlabel("loan_int_rate_missing")
+    ax.set_ylabel(var)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+
+
+# Imputation de la variable person_emp_length par la médiane
+
+
+```{python}
+## Application de l'imputation
+
+train_imputed, test_imputed, oot_imputed = impute_missing_values(
+    train=train_clean_outlier,
+    test=test_clean_outlier,
+    oot=oot_clean_outlier,
+    emp_var="person_emp_length",
+    rate_var="loan_int_rate",
+    emp_value=0
+)
+```
+
+
+
+## Sauvegarde des bases imputées
+
+```{python}
+train_imputed.to_csv(f"{path_datasets}/train_imputed.csv", index=False)
+test_imputed.to_csv(f"{path_datasets}/test_imputed.csv", index=False)
+oot_imputed.to_csv(f"{path_datasets}/oot_imputed.csv", index=False)
+```
+
+
+## Importation des bases imputées pour vérification des missing values et des types de variables
+
+```{python}
+import pandas as pd
+train_check = pd.read_csv(f"{path_datasets}/train_imputed.csv")
+test_check = pd.read_csv(f"{path_datasets}/test_imputed.csv")
+oot_check = pd.read_csv(f"{path_datasets}/oot_imputed.csv")
+
+# Vérificaiton des values manquantes de chaque variable dans les bases imputées
+print("Missing values in train_imputed:")
+print(train_check.isnull().sum())
+print("Missing values in test_imputed:")
+print(test_check.isnull().sum())
+print("Missing values in oot_imputed:")
+print(oot_check.isnull().sum())
+
+```
+
+
+
+
+
+
+
+
+
+
+

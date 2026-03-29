@@ -1,0 +1,275 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+```{python}
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("laotse/credit-risk-dataset")
+
+print("Path to dataset files:", path)
+
+```
+
+
+```{python}
+import os
+
+os.listdir(path)
+```
+
+
+```{python}
+import pandas as pd
+file_path = os.path.join(path, "credit_risk_dataset.csv")
+df = pd.read_csv(file_path)
+
+df.head()
+```
+
+
+```{python}
+df.dtypes
+```
+
+# Calcul du nombre d'observations de chaque modalité de la variable cb_person_cred_hist_length
+
+```{python}
+df["cb_person_cred_hist_length"].value_counts()
+
+df["year"] = 2024 - df["cb_person_cred_hist_length"]
+df["year"].value_counts()
+```
+
+```{python}
+# The clip function ensures that any value below 2013 is replaced by 2013
+df["year"] = df["year"].clip(lower=2013)
+```
+
+
+```{python}
+df["year"].value_counts()
+```
+
+
+```{python}
+obj_cols = df.select_dtypes(include="object").columns
+
+df[obj_cols] = df[obj_cols].astype("category")
+
+df.dtypes
+```
+
+
+```{python}
+import pandas as pd
+
+import importlib
+import src.data_analysis_utils as utils
+
+importlib.reload(utils)
+from src.data_analysis_utils import create_quartile_bins, generate_categorical_report_excel, plot_series
+
+eda_output_path = "/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/data_analysis_output/eda_output"
+
+datasets_path = "/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/datasets"
+```
+
+# Distribution par anciennété ou par historique (cb_person_cred_hist_length).
+
+
+
+```{python}
+
+# renommer la variable loan_status def 
+
+print(df["loan_status"].unique())
+
+# [1 0] -> [True False
+df["def"] = df["loan_status"].astype(int)
+
+summary = generate_categorical_report_excel(
+    df=df,
+    category_col="cb_person_cred_hist_length",
+    default_col="def",
+    output_path=f"{eda_output_path}/cb_person_cred_hist_length_report.xlsx",
+    sheet_name="Credit History Length",
+    title="Distribution par anciennété ou par historique",
+    category_label="Credit History Length",
+    sort_by="count",
+    ascending=False
+)
+
+print(summary)
+
+```
+
+# Distribution par année de début de l'historique de crédit (year).
+
+```{python}
+summary = generate_categorical_report_excel(
+    df=df,
+    category_col="year",
+    default_col="def",
+    output_path=f"{eda_output_path}/year_report.xlsx",
+    sheet_name="Year",
+    title="Distribution by Year of Credit History Start",
+    category_label="Year of Credit History Start",
+    sort_by="count",
+    ascending=False
+)
+```
+
+```{python}
+# Distribution by age (person_age)
+# Discretize the variable into quartiles
+
+df_with_age_bins = create_quartile_bins(
+    df,
+    variable="person_age",
+    new_var="age_quartile"
+)
+
+summary = generate_categorical_report_excel(
+    df=df_with_age_bins,
+    category_col="age_quartile",
+    default_col="def",
+    output_path=f"{eda_output_path}/age_quartile_report.xlsx",
+    sheet_name="Age Quartiles",
+    title="Distribution by Age (Quartiles)",
+    category_label="Age Quartiles",
+    sort_by="default_rate",
+    ascending=False
+)
+```
+
+
+## Application
+
+```{python}
+# Creation of the dataframe with the default rates by year and plot
+
+rates_by_year = df.groupby("year")["def"].mean().reset_index()
+
+plot_series(years=rates_by_year["year"], data={"Default rate": rates_by_year["def"] * 100})
+
+
+
+```
+
+
+# Creation de la base train$test qui est définie sur 2013 à 2021 et la base OOT qui est définie sur 2022.
+
+```{python}
+train_test_df = df[df["year"] <= 2021].copy()
+oot_df = df[df["year"] == 2022].copy()  
+
+# sauvegarde des bases
+train_test_df.to_csv(f"{datasets_path}/train_test_data.csv", index=False)
+oot_df.to_csv(f"{datasets_path}/oot_data.csv", index=False)
+```
+
+
+```{python}
+import pandas as pd
+
+
+```
+
+
+
+
+```{python}
+import pandas as pd
+
+
+```
+
+
+```{python}
+bounds_table, train_clean_outlier, test_clean_outlier, oot_clean_outlier = apply_iqr_bounds(
+    train_df,
+    test_df,
+    oot_df,
+    variables
+)
+```
+
+
+## COncernant la variable person_income, il je veux un code qui retourne le nombre d'observation inférieur à Lower Bound, le nombre d'observation supérieur à Upper Bound et le nombre d'observation entre les deux bornes, pour la base train.
+
+```{python}
+var = "person_income"
+lower_bound = bounds_table.loc[bounds_table["Variable"] == var, "Lower Bound"].values[0]
+upper_bound = bounds_table.loc[bounds_table["Variable"] == var, "Upper Bound"].values[0]
+train_var = train_df[var]
+below_lower = (train_var < lower_bound).sum()
+above_upper = (train_var > upper_bound).sum()
+between_bounds = ((train_var >= lower_bound) & (train_var <= upper_bound)).sum()
+print(f"Variable: {var}")
+print(f"Lower Bound: {lower_bound:.2f}")
+print(f"Upper Bound: {upper_bound:.2f}")
+print(f"Number of observations below lower bound: {below_lower}")
+print(f"Number of observations above upper bound: {above_upper}")
+print(f"Number of observations between bounds: {between_bounds}")
+# min, max, mean, median de la variable person_income dans la base train
+min_income = train_var.min()
+max_income = train_var.max()
+mean_income = train_var.mean()
+median_income = train_var.median()
+print(f"Min income: {min_income:.2f}")
+print(f"Max income: {max_income:.2f}")
+print(f"Mean income: {mean_income:.2f}")
+print(f"Median income: {median_income:.2f}")
+```
+
+
+
+
+
+
+```{python}
+
+```
+
+
+
+
+## Importation des bases imputées pour vérification des missing values et des types de variables
+
+```{python}
+import pandas as pd
+train_check = pd.read_csv("train_imputed.csv")
+test_check = pd.read_csv("test_imputed.csv")
+oot_check = pd.read_csv("oot_imputed.csv")
+
+# Vérificaiton des values manquantes de chaque variable dans les bases imputées
+print("Missing values in train_imputed:")
+print(train_check.isnull().sum())
+print("Missing values in test_imputed:")
+print(test_check.isnull().sum())
+print("Missing values in oot_imputed:")
+print(oot_check.isnull().sum())
+
+```
+
