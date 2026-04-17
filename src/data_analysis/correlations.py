@@ -58,9 +58,6 @@ def correlation_quanti_def_KW(database: pd.DataFrame,
     return pd.DataFrame(results).sort_values(by="p_value")
 
 
-import pandas as pd
-import numpy as np
-from scipy.stats import chi2_contingency
 
 def cramers_v(database: pd.DataFrame, var1: str, var2: str) -> float:
     """
@@ -167,7 +164,7 @@ def cramers_v_with_target(database: pd.DataFrame,
 
 
 
-import pandas as pd
+
 
 def correlation_matrix_quanti(database: pd.DataFrame,
                               continuous_vars: list,

@@ -22,8 +22,8 @@ jupyter: python3
 
 # Correlation Analysis
 
-
 ```{python}
+
 
 import pandas as pd
 
@@ -32,12 +32,14 @@ import src.data_analysis.correlations as utils
 
 importlib.reload(utils)
 from src.data_analysis.correlations import correlation_quanti_def_KW, cramers_v_with_target, correlation_matrix_quanti, cramers_v_matrix
+from config import data_path, src_path, data_output_path
 
 ```
 
 ```{python}
 # Impoort data from datasets
-path_datasets = "/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/datasets"
+path_datasets = data_path
+data_cleaning_output_path = data_output_path
 ```
 
 ```{python}
@@ -68,7 +70,7 @@ result = correlation_quanti_def_KW(
 print(result)
 
 # Save results to xlsx
-result.to_excel("/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/data_analysis_output/correlation/correlations_kw.xlsx", index=False)
+result.to_excel(f"{data_output_path}/correlation/correlations_kw.xlsx", index=False)
 
 ```
 
@@ -90,7 +92,7 @@ result = cramers_v_with_target(
 print(result)
 
 # Save results to xlsx
-result.to_excel("/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/data_analysis_output/correlation/cramers_v.xlsx", index=False)
+result.to_excel(f"{data_output_path}/correlation/cramers_v.xlsx", index=False)
 ```
 
 
@@ -104,7 +106,7 @@ corr = correlation_matrix_quanti(
 print(corr)
 
 # Save results to xlsx
-corr.to_excel("/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/data_analysis_output/correlation/correlation_matrix_spearman.xlsx")
+corr.to_excel(f"{data_output_path}/correlation/correlation_matrix_spearman.xlsx")
 ```
 
 
@@ -117,5 +119,5 @@ matrix = cramers_v_matrix(
 
 print(matrix)
 # Save results to xlsx
-matrix.to_excel("/Users/juniorjumbong/Desktop/personal-website/00_tds/01_PD_credit_scoring/data_analysis_output/correlation/cramers_v_matrix.xlsx")
+matrix.to_excel(f"{data_output_path}/correlation/cramers_v_matrix.xlsx")
 ```

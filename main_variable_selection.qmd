@@ -1,0 +1,153 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+# Correlation Analysis
+
+```{python}
+
+
+import pandas as pd
+
+import importlib
+import src.correlation.functions_for_var_selection as utils
+
+importlib.reload(utils)
+from src.correlation.functions_for_var_selection import*
+
+from config import data_path, src_path, data_output_path
+
+```
+
+```{python}
+# Impoort data from datasets
+path_datasets = data_path
+data_cleaning_output_path = data_output_path
+```
+
+
+```{python}
+# Import data from datasets
+train_imputed = pd.read_csv(f"{path_datasets}/train_imputed.csv")
+train_imputed.head()
+```
+
+
+```{python}
+continuous_vars = [
+    "person_income",
+    "person_age",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+    "cb_person_cred_hist_length"
+]
+
+
+qualitative_vars = [
+    "person_home_ownership",
+    "cb_person_default_on_file",
+    "loan_intent",
+    "loan_grade",
+]
+
+target = "def"
+```
+
+
+
+```{python}
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold
+
+
+
+skf = StratifiedKFold(n_splits=4, shuffle=True, random_state=42)
+
+train_imputed["fold"] = -1
+
+for fold, (_, test_idx) in enumerate(skf.split(train_imputed, train_imputed["def_year"])):
+    train_imputed.loc[test_idx, "fold"] = fold
+
+train_imputed["fold"].value_counts()
+```
+
+
+```{python}
+folds = build_and_save_folds(train_imputed, fold_col="fold", save_dir="folds/")
+print(len(folds[0]))
+```
+
+```{python}
+# Step 1 — Rule 1: drop variables uncorrelated with default on any fold
+rule1_vars = filter_uncorrelated_with_target(
+    folds=folds,
+    variables= continuous_vars,
+    target="def_year",
+    pvalue_threshold=0.05,
+)
+print(f"After Rule 1 ({len(rule1_vars)} variables): {rule1_vars}")
+```
+
+# Rule 2
+
+```{python}
+# ── Rule 2: drop categorical vars weakly linked to target ───
+print("── Rule 2: Cramér's V filter (categorical) ──")
+rule2_vars = filter_categorical_variables(
+    folds=folds,
+    cat_variables= qualitative_vars,
+    target="def_year",
+    low_threshold=0.10,
+    high_threshold=0.50,
+)
+print(f"After Rule 2 ({len(rule2_vars)} variables): {rule2_vars}")
+```
+
+```{python}
+# ── Rule 3: drop variables highly correlated with each other ──
+print("── Rule 3: Correlation filter (continuous) ──")
+selected_vars = filter_correlated_variables_kfold(
+        folds=folds,
+        variables= rule1_vars,
+        target="def",
+        threshold=0.5,
+    )
+print(rule1_vars)
+print(f"Selected variables ({len(selected_vars)}): {selected_vars}")
+```
+
+```{python}
+ ── Rule 4: Cramér's V filter — inter-variable (categorical) ─
+print("── Rule 4: Cramér's V filter (categorical × categorical) ──")
+selected_categorical = filter_correlated_categorical_variables(
+    folds=folds,
+    cat_variables=rule2_vars,       # <-- feed Rule 2 output into Rule 4
+    target="def_year",
+    high_threshold=0.50,
+)
+print(f"Retained: {len(selected_categorical)}/{len(rule2_vars)} variables\n")
+
+# ── Final selection ───────────────────────────────────────────
+selected_vars = selected_continuous + selected_categorical
+print(f"Final selection: {len(selected_vars)} variables → {selected_vars}")
+```
