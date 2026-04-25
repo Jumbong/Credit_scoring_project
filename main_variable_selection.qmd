@@ -71,6 +71,7 @@ qualitative_vars = [
 ]
 
 target = "def"
+print(train_imputed["cb_person_default_on_file"].value_counts())
 ```
 
 
@@ -126,18 +127,18 @@ print(f"After Rule 2 ({len(rule2_vars)} variables): {rule2_vars}")
 ```{python}
 # ── Rule 3: drop variables highly correlated with each other ──
 print("── Rule 3: Correlation filter (continuous) ──")
-selected_vars = filter_correlated_variables_kfold(
+selected_continuous = filter_correlated_variables_kfold(
         folds=folds,
         variables= rule1_vars,
         target="def",
         threshold=0.5,
     )
 print(rule1_vars)
-print(f"Selected variables ({len(selected_vars)}): {selected_vars}")
+print(f"Selected variables ({len(selected_continuous)}): {selected_continuous}\n")
 ```
 
 ```{python}
- ── Rule 4: Cramér's V filter — inter-variable (categorical) ─
+
 print("── Rule 4: Cramér's V filter (categorical × categorical) ──")
 selected_categorical = filter_correlated_categorical_variables(
     folds=folds,
@@ -145,6 +146,8 @@ selected_categorical = filter_correlated_categorical_variables(
     target="def_year",
     high_threshold=0.50,
 )
+print(rule2_vars)
+print(selected_categorical)
 print(f"Retained: {len(selected_categorical)}/{len(rule2_vars)} variables\n")
 
 # ── Final selection ───────────────────────────────────────────

@@ -1,0 +1,174 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+
+```{python}
+
+import pandas as pd
+
+import importlib
+import src.data_analysis.monotony_stability as utils
+
+importlib.reload(utils)
+from src.data_analysis.monotony_stability import*
+
+from config import data_path, src_path, data_output_path
+
+```
+
+
+```{python}
+# Impoort data from datasets
+path_datasets = data_path
+data_cleaning_output_path = data_output_path
+```
+
+
+```{python}
+# Import data from datasets
+train_imputed = pd.read_csv(f"{path_datasets}/train_imputed.csv")
+train_imputed.head()
+test_imputed = pd.read_csv(f"{path_datasets}/test_imputed.csv")
+
+oot_imputed = pd.read_csv(f"{path_datasets}/oot_imputed.csv")
+```
+
+
+
+```{python}
+
+
+# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+if __name__ == "__main__":
+   
+    fig = plot_default_by_bin(
+        df=train_imputed,
+        default_var="def",
+        continuous_var="loan_percent_income",
+        year_var="year",
+        bins=3,   # ← terciles
+        title="Montoney study of Loan Percent income",
+    )
+    #fig.savefig("/mnt/user-data/outputs/default_terciles.png", dpi=150)
+    plt.show()
+
+```
+
+ 
+ ```{python}
+ # ── Exemple d'utilisation ──────────────────────────────────────────────────────
+if __name__ == "__main__":
+    
+    fig = plot_default_by_category(
+        df=train_imputed,
+        default_var="def",
+        qualitative_var="cb_person_default_on_file",
+        year_var="year",
+        title="Monotony Historical default",
+    )
+    #fig.savefig("/mnt/user-data/outputs/default_categories.png", dpi=150)
+    plt.show()
+ ```
+
+ # Create the home_ownership_3 variable
+
+
+ ```{python}
+
+mapping = {
+    'OWN': 'OWN',
+    'MORTGAGE' : 'MORTGAGE',
+    "RENT": "OTHER_RENT", 
+    "OTHER": "OTHER_RENT"
+}
+train_imputed["home_ownership_3"] = train_imputed["person_home_ownership"].map(mapping)
+
+test_imputed["home_ownership_3"] = test_imputed["person_home_ownership"].map(mapping)
+
+oot_imputed["home_ownership_3"] = oot_imputed["person_home_ownership"].map(mapping)
+
+fig = plot_default_by_category(
+        df=train_imputed,
+        default_var="def",
+        qualitative_var="home_ownership_3",
+        year_var="year",
+        title="Monotony Home ownership 3",
+    )
+    #fig.savefig("/mnt/user-data/outputs/default_categories.png", dpi=150)
+plt.show()
+
+ ```
+
+
+
+ ```{python}
+
+
+# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+if __name__ == "__main__":
+
+    result = compute_psi_table(
+        df=train_imputed,
+        continuous_vars=["person_income", "person_emp_length", "loan_int_rate",
+        "loan_percent_income"],
+        qualitative_vars=["home_ownership_3", "cb_person_default_on_file"],
+        year_var="year",
+        bins=3,
+    )
+
+    print(result.to_string())
+    result.to_excel("year_to_year.xlsx")
+ ```
+
+
+
+ ```{python}
+
+
+
+# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # ── Cas nominal ───────────────────────────────────────────────────────────
+    result = compute_psi_stability(
+        train=train_imputed, test=test_imputed, oot=oot_imputed,
+        continuous_vars= ["person_income", "person_emp_length", "loan_int_rate",
+        "loan_percent_income"],
+        qualitative_vars=["home_ownership_3", "cb_person_default_on_file"],
+        bins=3,
+    )
+    print("── Résultat nominal ──")
+    print(result.to_string(), "\n")
+
+    # ── Démonstration des erreurs ─────────────────────────────────────────────
+    print("── Test erreur (bin vide dans REF ou CURR) ──")
+    try:
+        tiny_train = _make_df(20, seed=99)   # trop petit → bins vides probables
+        compute_psi_stability(
+            train=tiny_train, test=test, oot=oot,
+            continuous_vars=["income"], qualitative_vars=[], bins=3,
+        )
+    except (ZeroDivisionError, ValueError) as e:
+        print(e, "\n")
+
+    result.to_excel("psi_stability.xlsx")
+ ```

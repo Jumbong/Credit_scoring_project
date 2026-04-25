@@ -25,10 +25,10 @@ jupyter: python3
 import pandas as pd
 
 import importlib
-import src.data_cleaning as utils
+import src.data_analysis.data_cleaning as utils
 
 importlib.reload(utils)
-from src.data_cleaning import build_distribution_summary, build_bounds_table, apply_iqr_bounds, impute_missing_values
+from src.data_analysis.data_cleaning import build_distribution_summary, build_bounds_table, apply_iqr_bounds, impute_missing_values
 from config import data_path, src_path, data_output_path
 
 ```
@@ -68,6 +68,18 @@ train_df, test_df = train_test_split(train_test_df, test_size=0.2, random_state=
 # sauvegarde des bases
 train_df.to_csv(f"{path_datasets}/train_data.csv", index=False)
 test_df.to_csv(f"{path_datasets}/test_data.csv", index=False)
+```
+
+```{python}
+# Compute the number of defaults and observations per year.
+
+data = train_df.groupby("year")["def"].agg(
+    n_defaults ="sum",
+    n_obs ="count"
+)
+
+data.to_excel(f"{path_datasets}/train_per_year.xlsx")
+
 ```
 
 
