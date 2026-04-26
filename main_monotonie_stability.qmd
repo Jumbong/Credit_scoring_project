@@ -1,5 +1,5 @@
 ---
-title: "Exploratory Data Analysis"
+title: "Monotony and stability analysis"
 subtitle: ""
 date: last-modified
 sidebar: auto
@@ -58,7 +58,7 @@ oot_imputed = pd.read_csv(f"{path_datasets}/oot_imputed.csv")
 ```{python}
 
 
-# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+# Application
 if __name__ == "__main__":
    
     fig = plot_default_by_bin(
@@ -76,7 +76,8 @@ if __name__ == "__main__":
 
  
  ```{python}
- # ── Exemple d'utilisation ──────────────────────────────────────────────────────
+ # ── Application
+
 if __name__ == "__main__":
     
     fig = plot_default_by_category(
@@ -124,7 +125,8 @@ plt.show()
  ```{python}
 
 
-# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+# ── Application
+
 if __name__ == "__main__":
 
     result = compute_psi_table(
@@ -137,7 +139,7 @@ if __name__ == "__main__":
     )
 
     print(result.to_string())
-    result.to_excel("year_to_year.xlsx")
+    result.to_excel(f"{path_datasets}/year_to_year.xlsx")
  ```
 
 
@@ -146,7 +148,8 @@ if __name__ == "__main__":
 
 
 
-# ── Exemple d'utilisation ──────────────────────────────────────────────────────
+# ── Application
+
 if __name__ == "__main__":
     # ── Cas nominal ───────────────────────────────────────────────────────────
     result = compute_psi_stability(
@@ -170,5 +173,5 @@ if __name__ == "__main__":
     except (ZeroDivisionError, ValueError) as e:
         print(e, "\n")
 
-    result.to_excel("psi_stability.xlsx")
+    result.to_excel(f"{path_datasets}/psi_stability.xlsx")
  ```
