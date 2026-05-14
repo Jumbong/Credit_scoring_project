@@ -58,37 +58,34 @@ oot_imputed = pd.read_csv(f"{path_datasets}/oot_imputed.csv")
 ```{python}
 
 
-# Application
-if __name__ == "__main__":
+
    
-    fig = plot_default_by_bin(
-        df=train_imputed,
-        default_var="def",
-        continuous_var="loan_percent_income",
-        year_var="year",
-        bins=3,   # ← terciles
-        title="Montoney study of Loan Percent income",
-    )
-    #fig.savefig("/mnt/user-data/outputs/default_terciles.png", dpi=150)
-    plt.show()
+fig = plot_default_by_bin(
+    df=train_imputed,
+    default_var="def",
+    continuous_var="loan_percent_income",
+    year_var="year",
+    bins=3,   # ← terciles
+    title="Montoney study of Loan Percent income",
+)
+#fig.savefig("/mnt/user-data/outputs/default_terciles.png", dpi=150)
+plt.show()
 
 ```
 
  
  ```{python}
  # ── Application
-
-if __name__ == "__main__":
     
-    fig = plot_default_by_category(
-        df=train_imputed,
-        default_var="def",
-        qualitative_var="cb_person_default_on_file",
-        year_var="year",
-        title="Monotony Historical default",
-    )
-    #fig.savefig("/mnt/user-data/outputs/default_categories.png", dpi=150)
-    plt.show()
+fig = plot_default_by_category(
+    df=train_imputed,
+    default_var="def",
+    qualitative_var="cb_person_default_on_file",
+    year_var="year",
+    title="Monotony Historical default",
+)
+#fig.savefig("/mnt/user-data/outputs/default_categories.png", dpi=150)
+plt.show()
  ```
 
  # Create the home_ownership_3 variable
@@ -122,24 +119,24 @@ plt.show()
 
 
 
+
+
  ```{python}
 
 
 # ── Application
 
-if __name__ == "__main__":
+result = compute_psi_table(
+    df=train_imputed,
+    continuous_vars=["person_income", "person_emp_length", "loan_int_rate",
+    "loan_percent_income"],
+    qualitative_vars=["home_ownership_3", "cb_person_default_on_file"],
+    year_var="year",
+    bins=3,
+)
 
-    result = compute_psi_table(
-        df=train_imputed,
-        continuous_vars=["person_income", "person_emp_length", "loan_int_rate",
-        "loan_percent_income"],
-        qualitative_vars=["home_ownership_3", "cb_person_default_on_file"],
-        year_var="year",
-        bins=3,
-    )
-
-    print(result.to_string())
-    result.to_excel(f"{path_datasets}/year_to_year.xlsx")
+print(result.to_string())
+result.to_excel(f"{path_datasets}/year_to_year.xlsx")
  ```
 
 
@@ -174,4 +171,75 @@ if __name__ == "__main__":
         print(e, "\n")
 
     result.to_excel(f"{path_datasets}/psi_stability.xlsx")
+ ```
+
+
+
+ ```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_default_rate(df, variable, target='default', bins=5):
+    """
+    Plot le taux de défaut par bin d'une variable continue.
+    
+    Paramètres:
+    -----------
+    df       : DataFrame pandas
+    variable : str, nom de la variable continue
+    target   : str, nom de la variable cible (défaut = 'default')
+    bins     : int, nombre de bins égaux (défaut = 5)
+    """
+    
+    # Découpage en bins égaux
+    df_copy = df.copy()
+    df_copy['bin'] = pd.cut(df_copy[variable], bins=bins)
+    
+    # Calcul du taux de défaut par bin
+    taux = df_copy.groupby('bin', observed=True)[target].mean().reset_index()
+    taux.columns = ['bin', 'default_rate']
+    
+    # Label lisible pour l'axe X
+    taux['bin_label'] = taux['bin'].astype(str)
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(9, 5))
+    
+    ax.plot(taux['bin_label'], taux['default_rate'],
+            color='gray', linewidth=1.5,
+            marker='D', markersize=6,
+            markerfacecolor='gray', markeredgecolor='gray')
+    
+    ax.set_title(f'Default Rate versus {variable}', fontweight='bold', fontsize=12)
+    ax.set_xlabel(variable)
+    ax.set_ylabel('Default Rate')
+    
+    ax.yaxis.grid(True, color='lightgray', linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.xaxis.grid(False)
+    
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    
+    plt.xticks(rotation=30, ha='right')
+    plt.tight_layout()
+    plt.show()
+    
+    return taux
+
+
+# --- Exemple d'utilisation ---
+np.random.seed(42)
+df = pd.DataFrame({
+    'age':     np.random.randint(15, 80, size=10000),
+    'income':  np.random.normal(50000, 15000, size=10000),
+    'default': np.random.binomial(1, 0.02, size=10000)
+})
+
+plot_default_rate(train_imputed, variable='person_income', target='def', bins=10)
+plot_default_rate(train_imputed, variable='person_emp_length', target='def', bins=10)
+plot_default_rate(train_imputed, variable='loan_int_rate', target='def', bins=10)
+plot_default_rate(train_imputed, variable='loan_percent_income', target='def', bins=10)
+
  ```

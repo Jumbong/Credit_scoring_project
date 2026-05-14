@@ -1,0 +1,317 @@
+---
+title: "Monotony and stability analysis"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+
+```{python}
+
+import pandas as pd
+
+import importlib
+import src.categorization.catego as utils
+
+importlib.reload(utils)
+from src.categorization.catego import*
+
+from config import data_path, src_path, data_output_path
+
+```
+
+
+```{python}
+# Impoort data from datasets
+path_datasets = data_path
+data_cleaning_output_path = data_output_path
+```
+
+
+```{python}
+# Import data from datasets
+train_stability = pd.read_csv(f"{path_datasets}/train_stability.csv")
+train_stability.head()
+test_stability = pd.read_csv(f"{path_datasets}/test_stability.csv")
+
+oot_stability = pd.read_csv(f"{path_datasets}/oot_stability.csv")
+```
+
+
+```{python}
+variables = [
+    "person_income",
+    "person_emp_length",
+    "loan_int_rate",
+    "loan_percent_income"
+]
+
+fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+axes = axes.flatten()
+
+for ax, variable in zip(axes, variables):
+    plot_default_rate_ax(
+        train_stability,
+        variable=variable,
+        target="def",
+        bins=10,
+        ax=ax
+    )
+
+plt.tight_layout()
+plt.show()
+```
+
+# Woe of person_income
+
+```{python}
+# Woe of person_income
+variable = "person_income"
+iv_df, woe_df = iv_woe(train_stability[[variable, "def"]], "def", bins=3, show_woe=True)
+woe_df
+
+```
+
+```{python}
+print(woe_df)
+```
+
+```{python}
+print(iv_df)
+```
+
+
+```{python}
+train_dis = apply_cutoffs_from_woe_table(
+    df=train_stability,
+    variable="person_income",
+    woe_table=woe_df,
+    new_col="person_income_dis",
+    labels=["1", "2", "3"]
+
+)
+
+test_dis = apply_cutoffs_from_woe_table(
+    df=test_stability,
+    variable="person_income",
+    woe_table=woe_df,
+    new_col="person_income_dis",
+    labels=["1", "2", "3"]
+)
+
+oot_dis = apply_cutoffs_from_woe_table(
+    df=oot_stability,
+    variable="person_income",
+    woe_table=woe_df,
+    new_col="person_income_dis",
+    labels=["1", "2", "3"]
+)
+
+oot_dis[["person_income", "person_income_dis"]].tail()
+```
+
+```{python}
+tx_rsq_par_var(train_dis,[ "person_income_dis"], "year", "def")
+```
+
+```{python}
+combined_barplot_lineplot(train_dis, ["person_income_dis"], "def")
+```
+
+```{python}
+test_freq_by_group(train_dis, ["person_income_dis"] )
+```
+```{python}
+calculate_relative_difference(train_dis, "person_income_dis", "def")
+```
+
+
+```{python}
+variable = "person_emp_length"
+iv_df, woe_df = iv_woe(train_stability[[variable, "def"]], "def", bins=3, show_woe=True)
+woe_df
+```
+
+```{python}
+print(woe_df)
+```
+```{python}
+print(iv_df)
+```
+```{python}
+train_dis = apply_cutoffs_from_woe_table(
+    df=train_dis,
+    variable="person_emp_length",
+    woe_table=woe_df,
+    new_col="person_emp_length_dis",
+    labels=["1", "2", "3"]  
+)
+test_dis = apply_cutoffs_from_woe_table(
+    df=test_dis,
+    variable="person_emp_length",
+    woe_table=woe_df,
+    new_col="person_emp_length_dis",
+    labels=["1", "2", "3"]  
+)
+oot_dis = apply_cutoffs_from_woe_table(
+    df=oot_dis,
+    variable="person_emp_length",
+    woe_table=woe_df,
+    new_col="person_emp_length_dis",
+    labels=["1", "2", "3"]  
+)
+oot_dis[["person_emp_length", "person_emp_length_dis"]].tail()
+```
+
+```{python}
+tx_rsq_par_var(train_dis,[ "person_emp_length_dis"], "year", "def")
+```
+
+```{python}
+combined_barplot_lineplot(train_dis, ["person_emp_length_dis"], "def")
+```
+
+```{python}
+test_freq_by_group(train_dis, ["person_emp_length_dis"] )
+```
+
+```{python}
+calculate_relative_difference(train_dis, "person_emp_length_dis", "def")
+```
+
+
+```{python}
+variable = "loan_int_rate"
+iv_df, woe_df = iv_woe(train_stability[[variable, "def"]], "def", bins=3, show_woe=True)
+woe_df
+```
+
+```{python}
+print(woe_df)
+```
+```{python}
+print(iv_df)
+```
+```{python}
+train_dis = apply_cutoffs_from_woe_table(
+    df=train_dis,
+    variable="loan_int_rate",
+    woe_table=woe_df,
+    new_col="loan_int_rate_dis",
+    labels=["3", "2", "1"]
+)
+test_dis = apply_cutoffs_from_woe_table(
+    df=test_dis,
+    variable="loan_int_rate",
+    woe_table=woe_df,
+    new_col="loan_int_rate_dis",
+    labels=["3", "2", "1"]
+)
+oot_dis = apply_cutoffs_from_woe_table(
+    df=oot_dis,
+    variable="loan_int_rate",
+    woe_table=woe_df,
+    new_col="loan_int_rate_dis",
+    labels=["3", "2", "1"]
+)
+oot_dis[["loan_int_rate", "loan_int_rate_dis"]].tail()
+```
+
+```{python}
+tx_rsq_par_var(train_dis,[ "loan_int_rate_dis"], "year", "def")
+```
+
+```{python}
+combined_barplot_lineplot(train_dis, ["loan_int_rate_dis"], "def")
+```
+
+```{python}
+test_freq_by_group(train_dis, ["loan_int_rate_dis"] )
+```
+```{python}
+calculate_relative_difference(train_dis, "loan_int_rate_dis", "def")
+```
+
+```{python}
+variable = "loan_percent_income"
+iv_df, woe_df = iv_woe(train_stability[[variable, "def"]], "def", bins=3, show_woe=True)
+woe_df
+```
+
+```{python}
+print(woe_df)
+```
+```{python}
+print(iv_df)
+```
+```{python}
+train_dis = apply_cutoffs_from_woe_table(
+    df=train_dis,
+    variable="loan_percent_income",
+    woe_table=woe_df,
+    new_col="loan_percent_income_dis",
+    labels=["3", "2", "1"]
+)
+test_dis = apply_cutoffs_from_woe_table(
+    df=test_dis,
+    variable="loan_percent_income",
+    woe_table=woe_df,
+    new_col="loan_percent_income_dis",
+    labels=["3", "2", "1"]
+)
+oot_dis = apply_cutoffs_from_woe_table(
+    df=oot_dis,
+    variable="loan_percent_income",
+    woe_table=woe_df,
+    new_col="loan_percent_income_dis",
+    labels=["3", "2", "1"]
+)
+oot_dis[["loan_percent_income", "loan_percent_income_dis"]].tail()
+``` 
+
+```{python}
+tx_rsq_par_var(train_dis,[ "loan_percent_income_dis"], "year", "def")
+``` 
+
+
+```{python}
+combined_barplot_lineplot(train_dis, ["loan_percent_income_dis"], "def")    
+
+```
+```{python}
+test_freq_by_group(train_dis, ["loan_percent_income_dis"] )
+```
+
+```{python}
+calculate_relative_difference(train_dis, "loan_percent_income_dis", "def")
+``` 
+
+```{python}
+variables_dis = [
+    "person_income_dis",
+    "person_emp_length_dis",
+    "loan_int_rate_dis",
+    "loan_percent_income_dis"
+]
+
+print(train_dis[variables_dis].head())
+print(test_dis[variables_dis].head())
+print(oot_dis[variables_dis].head())
+```
