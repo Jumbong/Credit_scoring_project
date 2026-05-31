@@ -315,3 +315,12 @@ print(train_dis[variables_dis].head())
 print(test_dis[variables_dis].head())
 print(oot_dis[variables_dis].head())
 ```
+
+# Save the datasets with the new discretized variables
+
+```{python}
+train_dis.to_csv(f"{path_datasets}/train_discretized.csv", index=False)
+test_dis.to_csv(f"{path_datasets}/test_discretized.csv", index=False)
+oot_dis.to_csv(f"{path_datasets}/oot_discretized.csv", index=False)
+```
+

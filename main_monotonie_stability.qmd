@@ -243,3 +243,17 @@ plot_default_rate(train_imputed, variable='loan_int_rate', target='def', bins=10
 plot_default_rate(train_imputed, variable='loan_percent_income', target='def', bins=10)
 
  ```
+
+
+ ```{python}
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Save data stability 
+
+train_imputed.to_csv(f"{path_datasets}/train_stability.csv", index=False)
+
+test_imputed.to_csv(f"{path_datasets}/test_stability.csv", index=False)
+
+oot_imputed.to_csv(f"{path_datasets}/oot_stability.csv", index=False)   
+```
