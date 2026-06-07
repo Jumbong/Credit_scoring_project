@@ -4,12 +4,11 @@ from pathlib import Path
 import os
 import pickle
 import pandas as pd
-from scipy.stats import kruskal
+import numpy as np
+from scipy.stats import chi2_contingency, kruskal
 
 
-# ─────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────
+# Helpers.
 
 def kruskal_pvalue(df: pd.DataFrame, var: str, target: str) -> float:
     """
@@ -67,14 +66,12 @@ def get_vars_to_drop(
     }
 
 
-# ─────────────────────────────────────────────
-# FOLD CONSTRUCTION & PERSISTENCE
-# ─────────────────────────────────────────────
+# Fold construction and persistence.
 
 def build_and_save_folds(
     df: pd.DataFrame,
     fold_col: str = "fold",
-    save_dir: str = "folds/",
+    save_dir: str = "cv_folds_pickle/",
 ) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Build (train_i, test_i) pairs from a pre-computed fold column
@@ -103,7 +100,7 @@ def build_and_save_folds(
         for fold_i in sorted(df[fold_col].unique())
     }
 
-    # Persist each fold pair — pickle preserves dtypes and index integrity
+    # Persist each fold pair. Pickle preserves dtypes and index integrity.
     [
         pickle.dump(
             {"train": train, "test": test},
@@ -116,7 +113,7 @@ def build_and_save_folds(
 
 
 def load_folds(
-    save_dir: str = "folds/",
+    save_dir: str = "cv_folds_pickle/",
 ) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Reload persisted fold pairs from disk.
@@ -139,9 +136,7 @@ def load_folds(
     }
 
 
-# ─────────────────────────────────────────────
-# VARIABLE FILTER
-# ─────────────────────────────────────────────
+# Variable filters.
 
 def filter_correlated_variables_kfold(
     folds: dict[int, tuple[pd.DataFrame, pd.DataFrame]],
@@ -167,7 +162,7 @@ def filter_correlated_variables_kfold(
     Returns:
         Filtered list of variable names
     """
-    # Apply the correlation filter on the training set of each fold only —
+    # Apply the correlation filter on the training set of each fold only.
     # the test set is never used during variable selection to avoid leakage
     vars_to_drop_per_fold = [
         get_vars_to_drop(train, variables, target, threshold)
@@ -222,20 +217,12 @@ def filter_uncorrelated_with_target(
     ]
 
 
-from scipy.stats import chi2_contingency
-import numpy as np
-
-
-# ─────────────────────────────────────────────
-# HELPER
-# ─────────────────────────────────────────────
-
 def cramers_v(df: pd.DataFrame, var: str, target: str) -> float:
     """
-    Compute Cramér's V association measure between a categorical variable
+    Compute Cramer's V association measure between a categorical variable
     and a binary target.
 
-    Cramér's V ranges from 0 (no association) to 1 (perfect association).
+    Cramer's V ranges from 0 (no association) to 1 (perfect association).
     It is derived from the Chi-squared statistic and corrected for table size.
 
     Args:
@@ -244,7 +231,7 @@ def cramers_v(df: pd.DataFrame, var: str, target: str) -> float:
         target : Binary target column name (e.g. 'def_year')
 
     Returns:
-        Cramér's V coefficient (float between 0 and 1)
+        Cramer's V coefficient (float between 0 and 1)
     """
     # Build contingency table between the categorical variable and the target
     contingency_table = pd.crosstab(df[var], df[target])
@@ -256,7 +243,7 @@ def cramers_v(df: pd.DataFrame, var: str, target: str) -> float:
     # Number of rows and columns in the contingency table
     r, k = contingency_table.shape
 
-    # Cramér's V formula with bias correction
+    # Cramer's V formula with bias correction.
     phi2 = chi2 / n
     phi2_corr = max(0, phi2 - (k - 1) * (r - 1) / (n - 1))
     r_corr = r - (r - 1) ** 2 / (n - 1)
@@ -265,9 +252,7 @@ def cramers_v(df: pd.DataFrame, var: str, target: str) -> float:
     return np.sqrt(phi2_corr / min(r_corr - 1, k_corr - 1))
 
 
-# ─────────────────────────────────────────────
-# RULE 2 — Categorical variables filter
-# ─────────────────────────────────────────────
+# Rule 2: categorical variable filter.
 
 def filter_categorical_variables(
     folds: dict[int, tuple[pd.DataFrame, pd.DataFrame]],
@@ -282,27 +267,27 @@ def filter_categorical_variables(
 
     Two thresholds structure the decision:
       - low_threshold  : below this, the association is considered negligible
-                         → variable is dropped if V < low_threshold on any fold
+                         variable is dropped if V < low_threshold on any fold
       - high_threshold : above this, the association is considered strong
-                         → used downstream for inter-variable redundancy (Rule 3)
+                         used downstream for inter-variable redundancy (Rule 3)
 
-    A variable is kept only if its Cramér's V with the target exceeds
+    A variable is kept only if its Cramer's V with the target exceeds
     low_threshold on ALL folds.
 
     Args:
         folds          : Dictionary {fold_i: (train_i, test_i)}
         cat_variables  : List of categorical candidate variable names
         target         : Binary target column name (e.g. 'def_year')
-        low_threshold  : Minimum Cramér's V to consider the variable relevant
+        low_threshold  : Minimum Cramer's V to consider the variable relevant
                          (default: 0.10)
-        high_threshold : Cramér's V above which association is deemed strong
-                         (default: 0.50) — informational, logged only here
+        high_threshold : Cramer's V above which association is deemed strong
+                         (default: 0.50). Informational, logged only here
 
     Returns:
         List of categorical variables sufficiently associated with the target
         on ALL folds.
     """
-    # Compute Cramér's V for every (variable, fold) combination
+    # Compute Cramer's V for every (variable, fold) combination.
     # Shape: dict {var: [v_fold0, v_fold1, ...]}
     cramers_per_fold = {
         var: [
@@ -338,24 +323,24 @@ def filter_correlated_categorical_variables(
 ) -> list[str]:
     """
     Apply Rule 4 of the filter method: drop one variable from each pair
-    of categorical variables whose Cramér's V exceeds the threshold on
+    of categorical variables whose Cramer's V exceeds the threshold on
     AT LEAST ONE fold.
 
     Tiebreaker: among a highly associated pair, drop the variable with
-    the weakest link to the target — i.e. the lowest mean Cramér's V
+    the weakest link to the target, i.e. the lowest mean Cramer's V
     with the target across all folds.
 
     Args:
         folds          : Dictionary {fold_i: (train_i, test_i)}
         cat_variables  : List of categorical variables retained after Rule 2
         target         : Binary target column name (e.g. 'def_year')
-        high_threshold : Cramér's V threshold above which two variables
+        high_threshold : Cramer's V threshold above which two variables
                          are considered redundant (default: 0.50)
 
     Returns:
         Filtered list of categorical variable names
     """
-    # ── Step 1: mean Cramér's V with target across folds (tiebreaker) ──
+    # Step 1: mean Cramer's V with target across folds (tiebreaker).
     # Computed once per variable to avoid redundant calls
     mean_v_with_target = {
         var: np.mean([
@@ -365,13 +350,13 @@ def filter_correlated_categorical_variables(
         for var in cat_variables
     }
 
-    # ── Step 2: flag variables to drop from highly correlated pairs ──
-    # For each pair, compute Cramér's V on every fold
+    # Step 2: flag variables to drop from highly correlated pairs.
+    # For each pair, compute Cramer's V on every fold.
     # Drop the variable least associated with target if V >= threshold
     # on at least one fold
     vars_to_drop_per_fold = [
         {
-            # Drop the variable with the lowest mean Cramér's V with target
+            # Drop the variable with the lowest mean Cramer's V with target.
             min(v1, v2, key=lambda v: mean_v_with_target[v])
             for v1, v2 in combinations(cat_variables, 2)
             if cramers_v(train, v1, v2) >= high_threshold
@@ -379,10 +364,9 @@ def filter_correlated_categorical_variables(
         for train, _ in folds.values()
     ]
 
-    # ── Step 3: union across folds ──
+    # Step 3: union across folds.
     # A variable is dropped if flagged on at least one fold
     vars_to_drop = reduce(lambda a, b: a | b, vars_to_drop_per_fold)
 
-    # ── Step 4: preserve original ordering ──
+    # Step 4: preserve original ordering.
     return [v for v in cat_variables if v not in vars_to_drop]
-

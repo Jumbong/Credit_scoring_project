@@ -5,6 +5,7 @@ from scipy.stats import chi2_contingency
 import pandas as pd
 import matplotlib.patches as mpatches
 
+
 def plot_continuous_vs_categorical(
     df,
     continuous_var,
@@ -14,7 +15,7 @@ def plot_continuous_vs_categorical(
     sample=None
 ):
     """
-     Compare a continuous variable across categories
+    Compare a continuous variable across categories
     using boxplot, KDE, and ECDF (2x2 layout).
     """
 
@@ -36,7 +37,6 @@ def plot_continuous_vs_categorical(
 
     fig, axes = plt.subplots(2, 2, figsize=figsize, dpi=100)
 
-    # --- 1. Boxplot ---
     sns.boxplot(
         data=data,
         x=categorical_var,
@@ -45,7 +45,6 @@ def plot_continuous_vs_categorical(
     )
     axes[0, 0].set_title("Boxplot (median & spread)", loc="left")
 
-    # --- 2. Boxplot comparaison médianes ---
     sns.boxplot(
         data=data,
         x=categorical_var,
@@ -73,7 +72,7 @@ def plot_continuous_vs_categorical(
             fontsize=10,
             fontweight='bold'
         )
-    # --- 3. KDE only ---
+
     for cat, label in zip(categories, labels):
         subset = data[data[categorical_var] == cat][continuous_var]
         sns.kdeplot(
@@ -84,7 +83,6 @@ def plot_continuous_vs_categorical(
     axes[1, 0].set_title("Density comparison (KDE)", loc="left")
     axes[1, 0].legend()
 
-    # --- 4. ECDF ---
     for cat, label in zip(categories, labels):
         subset = np.sort(data[data[categorical_var] == cat][continuous_var])
         y = np.arange(1, len(subset) + 1) / len(subset)
@@ -100,6 +98,7 @@ def plot_continuous_vs_categorical(
     plt.tight_layout()
     plt.show()
 
+
 def contingency_analysis(
     df,
     var1,
@@ -109,28 +108,23 @@ def contingency_analysis(
     figsize=(7.24, 4.07)
 ):
     """
-    function to compute and visualize contingency table
-    + Chi-square test + Cramér's V.
+    Compute and visualize a contingency table
+    + Chi-square test + Cramer's V.
     """
 
-    # --- Contingency table ---
     table = pd.crosstab(df[var1], df[var2])
 
-    # --- Normalized version (optional) ---
     if normalize:
         table_norm = pd.crosstab(df[var1], df[var2], normalize=normalize, margins=True).round(3) * 100
     else:
         table_norm = None
 
-    # --- Chi-square test ---
     chi2, p, dof, expected = chi2_contingency(table)
 
-    # --- Cramér's V ---
     n = table.values.sum()
     r, k = table.shape
     cramers_v = np.sqrt(chi2 / (n * (min(r - 1, k - 1))))
 
-    # --- Plot (heatmap) ---
     if plot:
         sns.set_style("white")
         plt.figure(figsize=figsize, dpi=100)
@@ -152,7 +146,6 @@ def contingency_analysis(
         plt.tight_layout()
         plt.show()
 
-    # --- Output ---
     results = {
         "contingency_table": table,
         "normalized_table": table_norm,
@@ -164,8 +157,9 @@ def contingency_analysis(
 
     return results
 
+
 def plot_grouped_bar(df, cat_var, subcat_var,
-                          normalize="index", title=""):
+                     normalize="index", title="", output_path=None):
     ct = pd.crosstab(df[subcat_var], df[cat_var], normalize=normalize) * 100
     modalities = ct.index.tolist()
     categories = ct.columns.tolist()
@@ -174,7 +168,7 @@ def plot_grouped_bar(df, cat_var, subcat_var,
     x = np.arange(n_mod)
     width = 0.35
 
-    colors = ['#0F6E56', '#993C1D']  # teal = non-défaut, coral = défaut
+    colors = ['#0F6E56', '#993C1D']
 
     fig, ax = plt.subplots(figsize=(7.24, 4.07), dpi=100)
 
@@ -182,12 +176,10 @@ def plot_grouped_bar(df, cat_var, subcat_var,
         offset = (i - n_cat / 2 + 0.5) * width
         ax.bar(x + offset, ct[cat], width=width, color=color, label=str(cat))
 
-        # Annotations au-dessus de chaque barre
         for j, val in enumerate(ct[cat]):
             ax.text(x[j] + offset, val + 0.5, f"{val:.1f}%",
                     ha='center', va='bottom', fontsize=9, color='#444')
 
-    # Style Cole
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
@@ -195,7 +187,7 @@ def plot_grouped_bar(df, cat_var, subcat_var,
     ax.set_axisbelow(True)
     ax.set_xticks(x)
     ax.set_xticklabels(modalities, fontsize=11)
-    ax.set_ylabel("Taux (%)" if normalize else "Effectifs", fontsize=11, color='#555')
+    ax.set_ylabel("Rate (%)" if normalize else "Count", fontsize=11, color='#555')
     ax.tick_params(left=False, colors='#555')
 
 
@@ -206,5 +198,6 @@ def plot_grouped_bar(df, cat_var, subcat_var,
 
     ax.set_title(title, fontsize=13, fontweight='normal', pad=14)
     plt.tight_layout()
-    plt.savefig("default_by_ownership.png", dpi=150, bbox_inches='tight')
+    if output_path is not None:
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.show()

@@ -1,9 +1,9 @@
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import math
+
 
 def plot_default_rate_ax(data, variable, target, bins=10, ax=None):
     """
@@ -304,66 +304,68 @@ def combined_barplot_lineplot(df, cat_vars, cible, cols=2):
 
 def test_freq_by_group(data, qualitative_vars, threshold=0.05):
     """
-    Identifie les variables qualitatives qui ont au moins une modalité avec une fréquence relative
-    inférieure ou égale au seuil spécifié.
+    Identify categorical variables with at least one category whose relative
+    frequency is below or equal to the selected threshold.
     """
-    # Liste pour stocker les variables correspondant au critère
     unique_mod_result = []
 
     for var in qualitative_vars:
-        # Vérifie si la variable existe dans le DataFrame
         if var not in data.columns:
-            print(f"Attention : la variable '{var}' n'existe pas dans le DataFrame.")
+            print(f"Warning: variable '{var}' does not exist in the DataFrame.")
             continue
-        
-        # Calcul des fréquences relatives des modalités
-        value_counts = data[var].value_counts(normalize=True)  # Normalisation des fréquences
-        print("\nFréquences relatives des modalités pour la variable :", var,"\n")
+
+        value_counts = data[var].value_counts(normalize=True)
+        print("\nRelative category frequencies for variable:", var, "\n")
         print(value_counts)
 
-        # Vérifie si au moins une modalité a une fréquence <= threshold
         if (value_counts <= threshold).any():
             unique_mod_result.append(var)
 
-    # Message si aucune variable ne satisfait le critère
     if len(unique_mod_result) == 0:
-        print("Aucune variable n'a de modalités avec moins de 5% d'effectifs.")
-    else :
-        print(f"Les variables suivantes ont au moins une modalité avec une fréquence <= {threshold * 100}% :")
+        print("No variable has a category with a relative frequency below the threshold.")
+    else:
+        print(
+            "The following variables have at least one category with a "
+            f"relative frequency <= {threshold * 100}%:"
+        )
         print(unique_mod_result)
 
     return unique_mod_result
 
+
 def calculate_relative_difference(df, cat_var, cible):
     """
-    Calcule l'écart relatif entre la modalité actuelle et celle précédente
-    en fonction du taux de la variable cible.
-    
-    Args:
-        df (pd.DataFrame): DataFrame contenant les données.
-        cat_var (str): Nom de la variable catégorielle.
-        cible (str): Nom de la variable cible binaire (0 ou 1).
-        
-    Returns:
-        pd.DataFrame: DataFrame avec les modalités, taux de la cible,
-                      et écarts relatifs entre les modalités.
+    Compute the relative difference between consecutive categories sorted by
+    target rate.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe.
+    cat_var : str
+        Categorical variable name.
+    cible : str
+        Binary target variable name.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table with categories, target rates, and relative differences.
     """
-    # Calculer le taux de la variable cible par modalité
-    taux_cible = (
+    target_rate = (
         df.groupby(cat_var)[cible]
         .mean()
         .reset_index()
-        .rename(columns={cible: "taux_cible"})
+        .rename(columns={cible: "target_rate"})
     )
-    
-    
-    # Trier les modalités par taux cible croissant
-    taux_cible = taux_cible.sort_values("taux_cible").reset_index(drop=True) 
-    
-    # Calculer l'écart relatif entre la modalité actuelle et la précédente
-    taux_cible["ecart_relatif"] = taux_cible["taux_cible"].pct_change().fillna(0) *100
-    
-    return taux_cible
+
+    target_rate = target_rate.sort_values("target_rate").reset_index(drop=True)
+    target_rate["relative_difference"] = (
+        target_rate["target_rate"].pct_change().fillna(0) * 100
+    )
+
+    return target_rate
+
 
 def iv_woe(data, target, bins=5, show_woe=False, epsilon=1e-16):
     """
@@ -485,13 +487,7 @@ def iv_woe(data, target, bins=5, show_woe=False, epsilon=1e-16):
         )
 
         # Store the global IV of the variable
-        temp = pd.DataFrame(
-            {
-                "Variable": [ivars],
-                "IV": [d["IV"].sum()]
-            },
-            columns=["Variable", "IV"]
-        )
+        temp = pd.DataFrame({"Variable": [ivars], "IV": [d["IV"].sum()]})
 
         newDF = pd.concat([newDF, temp], axis=0)
         woeDF = pd.concat([woeDF, d], axis=0)
@@ -501,10 +497,6 @@ def iv_woe(data, target, bins=5, show_woe=False, epsilon=1e-16):
             print(d)
 
     return newDF, woeDF
-
-
-import numpy as np
-import pandas as pd
 
 
 def apply_cutoffs_from_woe_table(df, variable, woe_table, new_col=None, labels=None):
@@ -590,5 +582,4 @@ def apply_cutoffs_from_woe_table(df, variable, woe_table, new_col=None, labels=N
     )
 
     return df
-
 

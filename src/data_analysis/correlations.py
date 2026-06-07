@@ -3,8 +3,6 @@ import numpy as np
 from scipy.stats import kruskal, chi2_contingency
 
 
-
-
 def correlation_quanti_def_KW(database: pd.DataFrame,
                               continuous_vars: list,
                               target: str) -> pd.DataFrame:
@@ -54,14 +52,13 @@ def correlation_quanti_def_KW(database: pd.DataFrame,
             "p_value": p_value,
             "stats_kw": stat if 'stat' in locals() else None
         })
-       
-    return pd.DataFrame(results).sort_values(by="p_value")
 
+    return pd.DataFrame(results).sort_values(by="p_value")
 
 
 def cramers_v(database: pd.DataFrame, var1: str, var2: str) -> float:
     """
-    Compute Cramér's V between two categorical variables.
+    Compute Cramer's V between two categorical variables.
 
     Parameters
     ----------
@@ -75,7 +72,7 @@ def cramers_v(database: pd.DataFrame, var1: str, var2: str) -> float:
     Returns
     -------
     float
-        Cramér's V coefficient
+        Cramer's V coefficient
     """
 
     # Drop missing values
@@ -93,19 +90,17 @@ def cramers_v(database: pd.DataFrame, var1: str, var2: str) -> float:
     # Dimensions
     r, k = contingency_table.shape
 
-    # Cramér's V
+    # Cramer's V.
     v = np.sqrt((chi2 / n) / min(k - 1, r - 1))
 
     return v
-
-
 
 
 def cramers_v_with_target(database: pd.DataFrame,
                           categorical_vars: list,
                           target: str) -> pd.DataFrame:
     """
-    Compute Chi-square statistic and Cramér's V between multiple
+    Compute Chi-square statistic and Cramer's V between multiple
     categorical variables and a target variable.
 
     Parameters
@@ -120,7 +115,7 @@ def cramers_v_with_target(database: pd.DataFrame,
     Returns
     -------
     pd.DataFrame
-        Table with variable, chi2 and Cramér's V
+        Table with variable, chi2 and Cramer's V
     """
 
     results = []
@@ -159,11 +154,8 @@ def cramers_v_with_target(database: pd.DataFrame,
 
     result_df = pd.DataFrame(results)
 
-    # Option : tri par importance
+    # Sort by association strength.
     return result_df.sort_values(by="cramers_v", ascending=False)
-
-
-
 
 
 def correlation_matrix_quanti(database: pd.DataFrame,
@@ -203,13 +195,12 @@ def correlation_matrix_quanti(database: pd.DataFrame,
     return corr_matrix
 
 
-
 def cramers_v_matrix(database: pd.DataFrame,
                      categorical_vars: list,
                      corrected: bool = False,
                      as_percent: bool = False) -> pd.DataFrame:
     """
-    Compute Cramér's V correlation matrix for categorical variables.
+    Compute Cramer's V correlation matrix for categorical variables.
 
     Parameters
     ----------
@@ -225,7 +216,7 @@ def cramers_v_matrix(database: pd.DataFrame,
     Returns
     -------
     pd.DataFrame
-        Cramér's V matrix
+        Cramer's V matrix
     """
 
     def cramers_v(x, y):
@@ -245,9 +236,9 @@ def cramers_v_matrix(database: pd.DataFrame,
 
         if corrected:
             # Bergsma correction
-            phi2_corr = max(0, phi2 - ((k-1)*(r-1)) / (n-1))
-            r_corr = r - ((r-1)**2) / (n-1)
-            k_corr = k - ((k-1)**2) / (n-1)
+            phi2_corr = max(0, phi2 - ((k - 1) * (r - 1)) / (n - 1))
+            r_corr = r - ((r - 1) ** 2) / (n - 1)
+            k_corr = k - ((k - 1) ** 2) / (n - 1)
             denom = min(k_corr - 1, r_corr - 1)
         else:
             denom = min(k - 1, r - 1)

@@ -1,0 +1,119 @@
+{
+  "artifact_type": "categorical_logit_scorecard",
+  "formula": "Q(\"def\") ~ C(Q(\"loan_int_rate_dis\"), Treatment(reference=3)) + C(Q(\"loan_percent_income_dis\"), Treatment(reference=3)) + C(Q(\"cb_person_default_on_file\"), Treatment(reference='N')) + C(Q(\"home_ownership_3\"), Treatment(reference='OWN'))",
+  "target": "def",
+  "variables": [
+    "loan_int_rate_dis",
+    "loan_percent_income_dis",
+    "cb_person_default_on_file",
+    "home_ownership_3"
+  ],
+  "metrics": {
+    "Gini_train": 0.5938156050410457,
+    "Gini_test": 0.5804011103284024,
+    "Gini_OOT": 0.5740931994207759,
+    "Gini_folds_mean": 0.5932048103462391,
+    "Gini_penalized": 0.5600679100133259,
+    "Recall_penalized": 0.2261151956813736,
+    "F1_penalized": 0.3350962546214514,
+    "PR_AUC_penalized": 0.4843832102478143
+  },
+  "scorecard_table": [
+    {
+      "variable_number": 1,
+      "variable": "loan_int_rate_dis",
+      "modality": "3",
+      "coefficient": 0.0,
+      "coef_name": "REFERENCE",
+      "is_reference": true
+    },
+    {
+      "variable_number": 1,
+      "variable": "loan_int_rate_dis",
+      "modality": "1",
+      "coefficient": 1.3570449269788831,
+      "coef_name": "C(Q(\"loan_int_rate_dis\"), Treatment(reference=3))[T.1]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 1,
+      "variable": "loan_int_rate_dis",
+      "modality": "2",
+      "coefficient": 0.4050839745773257,
+      "coef_name": "C(Q(\"loan_int_rate_dis\"), Treatment(reference=3))[T.2]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 2,
+      "variable": "loan_percent_income_dis",
+      "modality": "3",
+      "coefficient": 0.0,
+      "coef_name": "REFERENCE",
+      "is_reference": true
+    },
+    {
+      "variable_number": 2,
+      "variable": "loan_percent_income_dis",
+      "modality": "1",
+      "coefficient": 1.6108305567539858,
+      "coef_name": "C(Q(\"loan_percent_income_dis\"), Treatment(reference=3))[T.1]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 2,
+      "variable": "loan_percent_income_dis",
+      "modality": "2",
+      "coefficient": 0.1901405417329175,
+      "coef_name": "C(Q(\"loan_percent_income_dis\"), Treatment(reference=3))[T.2]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 3,
+      "variable": "cb_person_default_on_file",
+      "modality": "N",
+      "coefficient": 0.0,
+      "coef_name": "REFERENCE",
+      "is_reference": true
+    },
+    {
+      "variable_number": 3,
+      "variable": "cb_person_default_on_file",
+      "modality": "Y",
+      "coefficient": 0.3117753580536858,
+      "coef_name": "C(Q(\"cb_person_default_on_file\"), Treatment(reference='N'))[T.Y]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 4,
+      "variable": "home_ownership_3",
+      "modality": "OWN",
+      "coefficient": 0.0,
+      "coef_name": "REFERENCE",
+      "is_reference": true
+    },
+    {
+      "variable_number": 4,
+      "variable": "home_ownership_3",
+      "modality": "MORTGAGE",
+      "coefficient": 0.9592937657163607,
+      "coef_name": "C(Q(\"home_ownership_3\"), Treatment(reference='OWN'))[T.MORTGAGE]",
+      "is_reference": false
+    },
+    {
+      "variable_number": 4,
+      "variable": "home_ownership_3",
+      "modality": "OTHER_RENT",
+      "coefficient": 1.9589442834238977,
+      "coef_name": "C(Q(\"home_ownership_3\"), Treatment(reference='OWN'))[T.OTHER_RENT]",
+      "is_reference": false
+    },
+    {
+      "variable_number": "",
+      "variable": "Intercept",
+      "modality": "Intercept",
+      "coefficient": -4.243875750401388,
+      "coef_name": "Intercept",
+      "is_reference": false
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Optional, Union
+from typing import Optional
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 
@@ -14,52 +14,48 @@ def build_default_summary(
     ascending: bool = False,
 ) -> pd.DataFrame:
     """
-    Construit un tableau de synthèse pour une variable catégorielle.
+    Build a summary table for a categorical variable.
 
-    Paramètres
-    ----------
     df : pd.DataFrame
-        DataFrame source.
+        Source dataframe.
     category_col : str
-        Nom de la variable catégorielle.
+        Categorical variable name.
     default_col : str
-        Colonne binaire indiquant le défaut (0/1 ou booléen).
-    category_label : str, optionnel
-        Libellé à afficher pour la première colonne.
-        Par défaut : category_col.
+        Binary default column (0/1 or boolean).
+    category_label : str, optional
+        Display label for the first column. Defaults to category_col.
     include_na : bool, default=False
-        Si True, conserve les valeurs manquantes comme catégorie.
+        If True, keep missing values as a category.
     sort_by : str, default="count"
-        Colonne de tri logique parmi {"count", "defaults", "prop", "default_rate", "category"}.
+        Sort key among {"count", "defaults", "prop", "default_rate", "category"}.
     ascending : bool, default=False
-        Sens du tri.
+        Sort direction.
 
-    Retour
-    ------
+    Returns
+    -------
     pd.DataFrame
-        Tableau prêt à exporter.
+        Export-ready summary table.
     """
 
     if category_col not in df.columns:
-        raise KeyError(f"La colonne catégorielle '{category_col}' est introuvable.")
+        raise KeyError(f"Categorical column '{category_col}' was not found.")
     if default_col not in df.columns:
-        raise KeyError(f"La colonne défaut '{default_col}' est introuvable.")
+        raise KeyError(f"Default column '{default_col}' was not found.")
 
     data = df[[category_col, default_col]].copy()
 
-    # Validation minimale sur la cible
-    # On convertit bool -> int ; sinon on suppose 0/1 documenté
+    # Convert boolean targets to integers; otherwise assume a documented 0/1 target.
     if pd.api.types.is_bool_dtype(data[default_col]):
         data[default_col] = data[default_col].astype(int)
 
-    # Gestion des NA de la variable catégorielle
+    # Handle missing categories.
     if include_na:
         data[category_col] = data[category_col].astype("object").fillna("Missing")
     else:
         data = data[data[category_col].notna()].copy()
 
     grouped = (
-        data.groupby(category_col, dropna=False,observed=False)[default_col]
+        data.groupby(category_col, dropna=False, observed=False)[default_col]
         .agg(count="size", defaults="sum")
         .reset_index()
     )
@@ -79,7 +75,7 @@ def build_default_summary(
     }
     if sort_by not in sort_mapping:
         raise ValueError(
-            "sort_by doit être parmi {'count', 'defaults', 'prop', 'default_rate', 'category'}."
+            "sort_by must be one of {'count', 'defaults', 'prop', 'default_rate', 'category'}."
         )
 
     grouped = grouped.sort_values(sort_mapping[sort_by], ascending=ascending).reset_index(drop=True)
@@ -95,8 +91,6 @@ def build_default_summary(
     )
 
     summary = pd.concat([grouped, total_row], ignore_index=True)
-
-    
 
     summary = summary.rename(
         columns={
@@ -118,24 +112,18 @@ def export_summary_to_excel(
     title: str = "All perimeters",
 ) -> None:
     """
-    Exporte le tableau de synthèse dans un fichier Excel avec mise en forme.
-    Nécessite le moteur xlsxwriter.
+    Export the summary table to a formatted Excel file.
+
+    Requires the xlsxwriter engine.
     """
 
     with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
-        #
-
         workbook = writer.book
         worksheet = workbook.add_worksheet(sheet_name)
 
         nrows, ncols = summary.shape
-        total_excel_row = 2 + nrows  # +1 implicite Excel car index 0-based côté xlsxwriter pour set_row
-        # Détail :
-        # ligne 0 : titre fusionné
-        # ligne 2 : header
-        # données commencent ligne 3 (Excel visuel), mais xlsxwriter manipule en base 0
 
-        # -------- Formats --------
+        # Formats.
         border_color = "#4F4F4F"
         header_bg = "#D9EAF7"
         title_bg = "#CFE2F3"
@@ -208,17 +196,17 @@ def export_summary_to_excel(
             "bg_color": total_bg,
         })
 
-        # -------- Titre fusionné --------
+        # Merged title.
         worksheet.merge_range(0, 0, 0, ncols - 1, title, title_fmt)
 
-        # -------- Header --------
+        # Header.
         worksheet.set_row(2, 28)
         for col_idx, col_name in enumerate(summary.columns):
             worksheet.write(1, col_idx, col_name, header_fmt)
 
-        # -------- Largeurs de colonnes --------
+        # Column widths.
         column_widths = {
-            0: 24,  # catégorie
+            0: 24,  # category
             1: 14,  # Nb of obs
             2: 12,  # Nb def
             3: 10,  # Prop
@@ -227,11 +215,11 @@ def export_summary_to_excel(
         for col_idx in range(ncols):
             worksheet.set_column(col_idx, col_idx, column_widths.get(col_idx, 15))
 
-        # -------- Mise en forme cellule par cellule --------
+        # Cell-level formatting.
         last_row_idx = nrows - 1
 
         for row_idx in range(nrows):
-            excel_row = 2 + row_idx  # données à partir de la ligne 3 (0-based xlsxwriter)
+            excel_row = 2 + row_idx
 
             is_total = row_idx == last_row_idx
 
@@ -249,11 +237,6 @@ def export_summary_to_excel(
 
                 worksheet.write(excel_row, col_idx, value, fmt)
 
-        # Optionnel : figer le header
-        #worksheet.freeze_panes(3, 1)
-
-        # Optionnel : encadrement global déjà géré par cellule
-        # mais on peut aussi améliorer la lisibilité
         worksheet.set_default_row(24)
 
 
@@ -270,10 +253,7 @@ def generate_categorical_report_excel(
     ascending: bool = False,
 ) -> pd.DataFrame:
     """
-    Fonction principale DRY :
-    1. calcule le tableau
-    2. l'exporte vers Excel
-    3. renvoie aussi le DataFrame récapitulatif
+    Build the categorical summary, export it to Excel, and return it.
     """
     summary = build_default_summary(
         df=df,
@@ -293,6 +273,7 @@ def generate_categorical_report_excel(
     )
 
     return summary
+
 
 def discretize_variable_by_quartiles(
     df: pd.DataFrame,
@@ -365,7 +346,6 @@ def discretize_variable_by_quartiles(
 
 
 def plot_series(years, data):
-    
     fig, ax = plt.subplots()
 
     for label, values in data.items():
@@ -376,6 +356,7 @@ def plot_series(years, data):
     ax.grid(True, linestyle="--", alpha=0.5)
 
     plt.show()
+
 
 def create_quartile_bins(
     df: pd.DataFrame,
@@ -392,7 +373,7 @@ def create_quartile_bins(
     vmin = data[variable].min()
     vmax = data[variable].max()
 
-    bins = [vmin - 1e-9, q1, q2, q3, vmax]  # petit epsilon pour inclure le min
+    bins = [vmin - 1e-9, q1, q2, q3, vmax]
 
     labels = [
         f"]{vmin:.2f} ; {q1:.2f}]",

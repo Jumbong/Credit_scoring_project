@@ -1,0 +1,229 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior 
+
+categories: []
+tags: [""]
+title-block-banner: false
+format: 
+  html: 
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+```{python}
+from pathlib import Path
+import shutil
+import pandas as pd
+
+from config import data_path, data_output_path
+
+
+raw_data_path = data_path / "raw"
+eda_output_path = data_output_path / "eda_output"
+datasets_path = data_path
+
+raw_data_path.mkdir(parents=True, exist_ok=True)
+eda_output_path.mkdir(parents=True, exist_ok=True)
+datasets_path.mkdir(parents=True, exist_ok=True)
+```
+
+```{python}
+from pathlib import Path
+import subprocess
+import pandas as pd
+
+raw_data_path = Path("data/raw")
+raw_data_path.mkdir(parents=True, exist_ok=True)
+
+raw_dataset_file = raw_data_path / "credit_risk_dataset.csv"
+
+if not raw_dataset_file.exists():
+    subprocess.run(
+        [
+            "kaggle",
+            "datasets",
+            "download",
+            "-d",
+            "laotse/credit-risk-dataset",
+            "-p",
+            str(raw_data_path),
+            "--unzip"
+        ],
+        check=True
+    )
+
+df = pd.read_csv(raw_dataset_file)
+
+print(df.shape)
+df.head()
+```
+
+
+```{python}
+
+raw_dataset_file = raw_data_path / "credit_risk_dataset.csv"
+
+if not raw_dataset_file.exists():
+    kaggle_dataset_path = Path(
+        kagglehub.dataset_download("laotse/credit-risk-dataset")
+    )
+
+    downloaded_file = kaggle_dataset_path / "credit_risk_dataset.csv"
+    shutil.copy2(downloaded_file, raw_dataset_file)
+
+raw_dataset_file
+```
+
+
+```{python}
+df = pd.read_csv(raw_dataset_file)
+
+df.head()
+```
+
+
+```{python}
+df.dtypes
+```
+
+# Calcul du nombre d'observations de chaque modalité de la variable cb_person_cred_hist_length
+
+```{python}
+df["cb_person_cred_hist_length"].value_counts()
+
+df["year"] = 2024 - df["cb_person_cred_hist_length"]
+df["year"].value_counts()
+```
+
+```{python}
+# The clip function ensures that any value below 2013 is replaced by 2013
+df["year"] = df["year"].clip(lower=2013)
+```
+
+
+```{python}
+df["year"].value_counts()
+```
+
+
+```{python}
+obj_cols = df.select_dtypes(include="object").columns
+
+df[obj_cols] = df[obj_cols].astype("category")
+
+df.dtypes
+```
+
+
+```{python}
+import importlib
+import src.data_analysis.data_analysis_utils as utils
+
+importlib.reload(utils)
+from src.data_analysis.data_analysis_utils import create_quartile_bins, generate_categorical_report_excel, plot_series
+```
+
+# Distribution par anciennété ou par historique (cb_person_cred_hist_length).
+
+
+
+```{python}
+
+# renommer la variable loan_status def 
+
+print(df["loan_status"].unique())
+
+# [1 0] -> [True False
+df["def"] = df["loan_status"].astype(int)
+
+summary = generate_categorical_report_excel(
+    df=df,
+    category_col="cb_person_cred_hist_length",
+    default_col="def",
+    output_path=f"{eda_output_path}/cb_person_cred_hist_length_report.xlsx",
+    sheet_name="Credit History Length",
+    title="Distribution par anciennété ou par historique",
+    category_label="Credit History Length",
+    sort_by="count",
+    ascending=False
+)
+
+print(summary)
+
+```
+
+# Distribution par année de début de l'historique de crédit (year).
+
+```{python}
+summary = generate_categorical_report_excel(
+    df=df,
+    category_col="year",
+    default_col="def",
+    output_path=f"{eda_output_path}/year_report.xlsx",
+    sheet_name="Year",
+    title="Distribution by Year of Credit History Start",
+    category_label="Year of Credit History Start",
+    sort_by="count",
+    ascending=False
+)
+```
+
+```{python}
+# Distribution by age (person_age)
+# Discretize the variable into quartiles
+
+df_with_age_bins = create_quartile_bins(
+    df,
+    variable="person_age",
+    new_var="age_quartile"
+)
+
+summary = generate_categorical_report_excel(
+    df=df_with_age_bins,
+    category_col="age_quartile",
+    default_col="def",
+    output_path=f"{eda_output_path}/age_quartile_report.xlsx",
+    sheet_name="Age Quartiles",
+    title="Distribution by Age (Quartiles)",
+    category_label="Age Quartiles",
+    sort_by="default_rate",
+    ascending=False
+)
+```
+
+
+## Application
+
+```{python}
+# Creation of the dataframe with the default rates by year and plot
+
+rates_by_year = df.groupby("year")["def"].mean().reset_index()
+
+plot_series(years=rates_by_year["year"], data={"Default rate": rates_by_year["def"] * 100})
+
+
+
+```
+
+
+# Creation de la base train/test qui est définie sur 2013 à 2021 et la base OOT qui est définie sur 2022.
+
+```{python}
+train_test_df = df[df["year"] <= 2021].copy()
+oot_df = df[df["year"] == 2022].copy()  
+
+# sauvegarde des bases
+train_test_df.to_csv(f"{datasets_path}/train_test_data.csv", index=False)
+oot_df.to_csv(f"{datasets_path}/oot_data.csv", index=False)
+```

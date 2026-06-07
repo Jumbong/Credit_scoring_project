@@ -1,0 +1,221 @@
+---
+title: "Logistic Model Selection"
+subtitle: ""
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior
+
+categories: []
+tags: [""]
+title-block-banner: false
+format:
+  html:
+    mainfont: Times New Roman
+    fontsize: 1.1em
+
+jupyter: python3
+
+---
+
+
+```{python}
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from config import data_path, data_output_path
+from src.selection.logit_model_selection import (
+    create_stratified_folds_without_sklearn,
+    evaluate_saved_score_model,
+    generate_logit_formulas,
+    load_score_model_pickle,
+    save_best_model_pickle,
+    train_models_with_all_checks,
+)
+```
+
+
+```{python}
+path_datasets = data_path
+```
+
+
+```{python}
+train_dis = pd.read_csv(f"{path_datasets}/train_discretized.csv")
+test_dis = pd.read_csv(f"{path_datasets}/test_discretized.csv")
+oot_dis = pd.read_csv(f"{path_datasets}/oot_discretized.csv")
+
+train_dis["def"].value_counts(normalize=True)
+
+F1_score = 2 * (train_dis["def"].value_counts(normalize=True)[1]) / (
+    train_dis["def"].value_counts(normalize=True)[1]
+    + 1
+)
+print(f"Baseline F1-score: {F1_score:.4f}")
+```
+
+
+```{python}
+variables = [
+    "person_income_dis",
+    "person_emp_length_dis",
+    "loan_int_rate_dis",
+    "loan_percent_income_dis",
+    "cb_person_default_on_file",
+    "home_ownership_3"
+]
+
+target = "def"
+fold_col = "fold"
+n_splits = 4
+recall_threshold = 0.5
+```
+
+
+```{python}
+train_dis_with_folds = create_stratified_folds_without_sklearn(
+    train_df=train_dis,
+    n_splits=n_splits,
+    target=target,
+    year_col="year",
+    fold_col=fold_col,
+    random_state=42
+)
+train_dis_with_folds[fold_col].value_counts().sort_index()
+```
+
+
+```{python}
+summaries = {}
+
+for k_variables in range(1, len(variables) + 1):
+    formulas_k = generate_logit_formulas(
+        train_df=train_dis_with_folds.drop(columns=[fold_col]),
+        variables=variables,
+        k=k_variables,
+        target=target
+    )
+
+    results_k = train_models_with_all_checks(
+        formula_combinations=formulas_k,
+        train_df_with_folds=train_dis_with_folds,
+        test_df=test_dis,
+        oot_df=oot_dis,
+        variables=variables,
+        target=target,
+        fold_col=fold_col,
+        alpha=0.05,
+        vif_threshold=10,
+        recall_threshold=recall_threshold,
+        maxiter=100
+    )
+
+    summaries[k_variables] = results_k.sort_values(
+        [
+            "all_checks_OK",
+            "Gini_penalized",
+            "PR_AUC_penalized",
+            "Recall_penalized",
+            "F1_penalized",
+            "Gini_folds_mean"
+        ],
+        ascending=[False, False, False, False, False, False]
+    )
+
+    print(f"k={k_variables}: {summaries[k_variables].shape[0]} trained models")
+```
+
+
+```{python}
+output_file = f"{data_output_path}/summary_models.xlsx"
+
+with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+    for k_variables, summary_df in summaries.items():
+        summary_df.to_excel(
+            writer,
+            sheet_name=f"summary_{k_variables}",
+            index=False
+        )
+
+output_file
+```
+
+## Save and validate the selected 4-variable model
+
+Statistical note: the train Gini is useful as an in-sample diagnostic, but the model validation should mainly rely on the test and OOT Gini/ROC curves. The train metric can be optimistic because the model was fitted on that sample.
+
+```{python}
+model_output_dir = Path(data_output_path) / "model_selection"
+model_output_dir.mkdir(parents=True, exist_ok=True)
+
+best_4_model_pickle = model_output_dir / "best_4_variables_logit_scorecard.pkl"
+
+best_4_artifact = save_best_model_pickle(
+    summary_df=summaries[4],
+    train_df=train_dis,
+    output_path=best_4_model_pickle,
+    n_variables=4,
+    target=target,
+    maxiter=100
+)
+
+best_4_model_pickle
+```
+
+```{python}
+pd.DataFrame(best_4_artifact["scorecard_table"])
+```
+
+```{python}
+loaded_best_4_artifact = load_score_model_pickle(best_4_model_pickle)
+
+gini_summary, roc_curves = evaluate_saved_score_model(
+    artifact=loaded_best_4_artifact,
+    datasets={
+        "Train": train_dis,
+        "Test": test_dis,
+        "OOT": oot_dis,
+    },
+    target=target
+)
+
+gini_summary
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(7, 5))
+
+for dataset_name, roc_df in roc_curves.items():
+    gini_value = gini_summary.loc[
+        gini_summary["dataset"].eq(dataset_name),
+        "Gini"
+    ].iloc[0]
+
+    ax.plot(
+        roc_df["fpr"],
+        roc_df["tpr"],
+        label=f"{dataset_name} - Gini={gini_value:.2%}"
+    )
+
+ax.plot([0, 1], [0, 1], linestyle="--", color="grey", linewidth=1)
+ax.set_title("ROC curves - selected 4-variable model")
+ax.set_xlabel("False Positive Rate")
+ax.set_ylabel("True Positive Rate")
+ax.legend(loc="lower right")
+ax.grid(alpha=0.3)
+plt.show()
+```
+
+
+```{python}
+summaries[1].head(20)
+```
+
+
+```{python}
+summaries[2].head(20)
+```
