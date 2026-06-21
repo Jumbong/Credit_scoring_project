@@ -1,0 +1,706 @@
+---
+title: "Score Computation"
+subtitle: "Score per counterparty and variable contribution"
+date: last-modified
+sidebar: auto
+number-sections: false
+toc: true
+author:
+  - Jumbong Junior
+format:
+  html:
+    mainfont: Times New Roman
+    fontsize: 1.1em
+jupyter: python3
+---
+
+```{python}
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.ticker import PercentFormatter
+
+from config import data_path, data_output_path
+from src.modeling.score_computation import (
+    build_score_outputs,
+    build_conditional_density_table,
+    build_score_class_table,
+    build_score_class_stability_tables,
+    build_score_vingtile_default_rate,
+    load_score_model_artifact,
+)
+```
+
+## Load datasets and selected model
+
+```{python}
+train_dis = pd.read_csv(Path(data_path) / "train_discretized.csv")
+test_dis = pd.read_csv(Path(data_path) / "test_discretized.csv")
+oot_dis = pd.read_csv(Path(data_path) / "oot_discretized.csv")
+
+model_pickle = (
+    Path(data_output_path)
+    / "model_selection"
+    / "best_4_variables_logit_scorecard.pkl"
+)
+
+score_artifact = load_score_model_artifact(model_pickle)
+score_artifact["formula"]
+```
+
+## Compute modality scores and individual scores
+
+The selected logistic model estimates default risk. Higher coefficients indicate higher default risk.  
+The score is therefore defined so that low-risk modalities receive more points, and the total score ranges from 0 to 1000.
+
+```{python}
+modality_score_table, scored_datasets, variable_contributions = build_score_outputs(
+    artifact=score_artifact,
+    train_df=train_dis,
+    test_df=test_dis,
+    oot_df=oot_dis,
+    score_scale=1000
+)
+
+modality_score_table
+```
+
+## Variable contributions
+
+`scale_contribution_pct` measures the maximum possible contribution of each variable to the 0-1000 scale.  
+`score_contribution_pct` measures the empirical contribution using the train distribution of modalities.
+
+```{python}
+variable_contributions
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(8, 4))
+
+plot_df = variable_contributions.set_index("variable_label")[
+    ["scale_contribution_pct", "score_contribution_pct"]
+]
+plot_df.plot(kind="bar", ax=ax)
+
+ax.axhline(
+    50,
+    color="red",
+    linestyle="--",
+    linewidth=1,
+    label="50% threshold"
+)
+ax.set_title("Variable contributions")
+ax.set_xlabel("")
+ax.set_ylabel("Contribution (%)")
+ax.legend()
+ax.grid(axis="y", alpha=0.3)
+plt.xticks(rotation=30, ha="right")
+plt.show()
+```
+
+## Score distribution
+
+```{python}
+score_distribution = pd.concat(
+    [
+        scored_datasets["Train"][["dataset", "score_total"]],
+        scored_datasets["Test"][["dataset", "score_total"]],
+        scored_datasets["OOT"][["dataset", "score_total"]],
+    ],
+    ignore_index=True
+)
+
+score_distribution.groupby("dataset")["score_total"].describe()
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(8, 4))
+
+for dataset_name, dataset_scores in score_distribution.groupby("dataset"):
+    ax.hist(
+        dataset_scores["score_total"].dropna(),
+        bins=30,
+        alpha=0.45,
+        label=dataset_name
+    )
+
+ax.set_title("Distribution of total score by dataset")
+ax.set_xlabel("Total score")
+ax.set_ylabel("Number of counterparties")
+ax.legend()
+ax.grid(axis="y", alpha=0.3)
+plt.show()
+```
+
+## Conditional score density by default status
+
+These charts compare the distribution of scores conditional on the observed default status.  
+The more separated the two curves are, the more discriminating the score is. Since a high score means lower risk, non-default observations are expected to be shifted toward higher scores.
+
+```{python}
+conditional_density = build_conditional_density_table(
+    scored_datasets=scored_datasets,
+    target="def",
+    score_col="score_total",
+    grid_size=300,
+    score_min=0,
+    score_max=1000
+)
+
+conditional_density.head()
+```
+
+```{python}
+fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
+
+for ax, dataset_name in zip(axes, ["Train", "Test", "OOT"]):
+    density_df = conditional_density.loc[
+        conditional_density["dataset"].eq(dataset_name)
+    ]
+
+    for target_value, label, color in [
+        (0, "Non-default", "#2F6B3F"),
+        (1, "Default", "#B51E18"),
+    ]:
+        curve = density_df.loc[density_df["def"].eq(target_value)]
+        ax.plot(
+            curve["score"],
+            curve["density"],
+            label=label,
+            color=color,
+            linewidth=2
+        )
+
+    ax.set_title(dataset_name, fontweight="bold", fontsize=13)
+    ax.text(
+        0.02,
+        0.94,
+        dataset_name,
+        transform=ax.transAxes,
+        fontsize=12,
+        fontweight="bold",
+        verticalalignment="top",
+        bbox={
+            "boxstyle": "round,pad=0.25",
+            "facecolor": "white",
+            "edgecolor": "#444444",
+            "alpha": 0.85,
+        },
+    )
+    ax.set_xlabel("Score")
+    ax.grid(alpha=0.3)
+
+axes[0].set_ylabel("Density")
+axes[-1].legend(loc="upper right")
+fig.suptitle("Conditional score density by default status")
+plt.tight_layout()
+plt.show()
+```
+
+## Final scored base
+
+```{python}
+base_final_with_score = pd.concat(
+    [
+        scored_datasets["Train"][["year", "def", "score_total", "dataset"]],
+        scored_datasets["Test"][["year", "def", "score_total", "dataset"]],
+        scored_datasets["OOT"][["year", "def", "score_total", "dataset"]],
+    ],
+    ignore_index=True
+)
+
+base_final_with_score = base_final_with_score[
+    ["year", "def", "score_total", "dataset"]
+]
+
+base_final_with_score.groupby("dataset").agg(
+    n=("score_total", "size"),
+    min_score=("score_total", "min"),
+    mean_score=("score_total", "mean"),
+    max_score=("score_total", "max"),
+    default_rate=("def", "mean")
+)
+```
+
+## Default rate by score vingtile
+
+The default rate is the proportion of loans in default among all loans in each score bucket.  
+The score is split into 20 ordered buckets, from the lowest scores to the highest scores.
+
+```{python}
+default_rate_by_vingtile = build_score_vingtile_default_rate(
+    scored_df=base_final_with_score,
+    target="def",
+    score_col="score_total",
+    n_bins=20
+)
+
+default_rate_by_vingtile
+```
+
+```{python}
+score_vingtile_plot_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "default_rate_by_score_vingtile.png"
+)
+
+fig, ax = plt.subplots(figsize=(10, 5))
+
+ax.plot(
+    default_rate_by_vingtile["vingtile"],
+    default_rate_by_vingtile["default_rate"],
+    color="#9D1712",
+    marker="o",
+    linewidth=2.2,
+)
+ax.bar(
+    default_rate_by_vingtile["vingtile"],
+    default_rate_by_vingtile["default_rate"],
+    color="#D9D9D9",
+    edgecolor="#8C8C8C",
+    alpha=0.7,
+)
+
+ax.set_title("Default rate by score vingtile")
+ax.set_xlabel("Score vingtile, from lowest score to highest score")
+ax.set_ylabel("Default rate")
+ax.set_xticks(default_rate_by_vingtile["vingtile"])
+ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+ax.grid(axis="y", alpha=0.3)
+ax.set_ylim(0, default_rate_by_vingtile["default_rate"].max() + 0.12)
+
+score_class_boundaries = [3.5, 6.5, 8.5, 12.5, 17.5]
+score_class_groups = [
+    (1, 3, "Class 1\n[0 ; 241]"),
+    (4, 6, "Class 2\n[241 ; 331]"),
+    (7, 8, "Class 3\n[332 ; 498]"),
+    (9, 12, "Class 4\n[498 ; 589]"),
+    (13, 17, "Class 5\n[589 ; 780]"),
+    (18, 20, "Class 6\n[781 ; 1000]"),
+]
+
+for boundary in score_class_boundaries:
+    ax.axvline(
+        boundary,
+        color="#2F2F2F",
+        linestyle="--",
+        linewidth=1.2,
+        alpha=0.7,
+    )
+
+for start, end, label in score_class_groups:
+    ax.text(
+        (start + end) / 2,
+        0.97,
+        label,
+        transform=ax.get_xaxis_transform(),
+        ha="center",
+        va="top",
+        fontsize=8,
+        bbox={
+            "boxstyle": "round,pad=0.25",
+            "facecolor": "white",
+            "edgecolor": "#B0B0B0",
+            "alpha": 0.85,
+        },
+    )
+
+for _, row in default_rate_by_vingtile.iterrows():
+    ax.annotate(
+        f"{row['default_rate']:.1%}",
+        (row["vingtile"], row["default_rate"]),
+        textcoords="offset points",
+        xytext=(0, 7),
+        ha="center",
+        fontsize=8,
+    )
+
+plt.tight_layout()
+fig.savefig(score_vingtile_plot_file, dpi=200, bbox_inches="tight")
+plt.show()
+```
+
+## Native score risk classes
+
+The score classes are built by grouping the 20 score vingtiles:
+
+- Class 1: vingtiles 1, 2 and 3;
+- Class 2: vingtiles 4, 5 and 6;
+- Class 3: vingtiles 7 and 8;
+- Class 4: vingtiles 9, 10, 11 and 12;
+- Class 5: vingtiles 13, 14, 15, 16 and 17;
+- Class 6: vingtiles 18, 19 and 20.
+
+Class 1 contains the lowest scores and therefore the riskiest counterparties.  
+Class 6 contains the highest scores and therefore the least risky counterparties.
+The variable `rating_expert` is the operational score-grid class assigned to each counterparty.
+
+```{python}
+score_class_table, base_final_with_score_class = build_score_class_table(
+    base_final_with_score=base_final_with_score,
+    target="def",
+    score_col="score_total",
+    n_bins=20,
+    min_population_share=0.01,
+    min_default_count=500,
+)
+
+score_class_table
+```
+
+```{python}
+score_class_plot_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "default_rate_by_score_class.png"
+)
+
+fig, ax = plt.subplots(figsize=(11, 5))
+
+ax.bar(
+    score_class_table["score_class"],
+    score_class_table["default_rate"],
+    color="#D9D9D9",
+    edgecolor="#8C8C8C",
+    alpha=0.75,
+)
+ax.plot(
+    score_class_table["score_class"],
+    score_class_table["default_rate"],
+    color="#9D1712",
+    marker="o",
+    linewidth=2.2,
+)
+
+ax.set_title("Default rate by score risk class")
+ax.set_xlabel("Score interval, from highest risk to lowest risk")
+ax.set_ylabel("Default rate")
+ax.set_xticks(score_class_table["score_class"])
+ax.set_xticklabels(
+    score_class_table["score_interval"],
+    rotation=25,
+    ha="right",
+)
+ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+ax.grid(axis="y", alpha=0.3)
+
+for _, row in score_class_table.iterrows():
+    ax.annotate(
+        f"{row['default_rate']:.1%}",
+        (row["score_class"], row["default_rate"]),
+        textcoords="offset points",
+        xytext=(0, 7),
+        ha="center",
+        fontsize=9,
+    )
+
+plt.tight_layout()
+fig.savefig(score_class_plot_file, dpi=200, bbox_inches="tight")
+plt.show()
+```
+
+## Score risk class summary table
+
+```{python}
+risk_class_summary_table = pd.DataFrame({
+    "#": score_class_table["score_class"].astype(int),
+    "Score interval": score_class_table["score_interval"],
+    "Risk label": score_class_table["risk_label"],
+    "Population share": score_class_table["population_share"],
+    "Default rate": score_class_table["default_rate"],
+    "Relative gap": score_class_table["relative_gap_vs_previous"],
+})
+
+risk_class_summary_table
+```
+
+```{python}
+risk_class_summary_table_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_risk_classes_summary_table_clean.png"
+)
+
+display_table = risk_class_summary_table.copy()
+display_table["Population share"] = display_table["Population share"].map(
+    lambda value: f"{value:.2%}"
+)
+display_table["Default rate"] = display_table["Default rate"].map(
+    lambda value: f"{value:.2%}"
+)
+display_table["Relative gap"] = display_table["Relative gap"].map(
+    lambda value: "-" if pd.isna(value) else f"{value:.2%}"
+)
+
+fig, ax = plt.subplots(figsize=(13, 4.6))
+ax.axis("off")
+
+mat_table = ax.table(
+    cellText=display_table.values,
+    colLabels=display_table.columns,
+    colWidths=[0.07, 0.25, 0.22, 0.16, 0.18, 0.16],
+    cellLoc="center",
+    loc="center",
+)
+mat_table.auto_set_font_size(False)
+mat_table.set_fontsize(13)
+mat_table.scale(1, 2.25)
+
+for (row, col), cell in mat_table.get_celld().items():
+    cell.set_edgecolor("#FFFFFF")
+    cell.set_linewidth(1.2)
+
+    if row == 0:
+        cell.set_facecolor("#9D1712")
+        cell.get_text().set_color("#FFFFFF")
+        cell.get_text().set_fontweight("bold")
+    elif col == 0:
+        cell.set_facecolor("#7F0D09")
+        cell.get_text().set_color("#FFFFFF")
+        cell.get_text().set_fontweight("bold")
+    else:
+        cell.set_facecolor("#E9E9E9" if row % 2 == 1 else "#C7C7C7")
+        cell.get_text().set_color("#222222")
+
+plt.tight_layout(pad=0.2)
+fig.savefig(risk_class_summary_table_file, dpi=220, bbox_inches="tight")
+plt.show()
+```
+
+## Score class stability over time
+
+Risk class validation requires checking both dimensions over time:
+
+- risk stability: default rate by year and score class;
+- volume stability: population share by year and score class.
+
+```{python}
+(
+    score_class_stability_by_year,
+    score_class_stability_summary,
+    score_class_risk_pivot,
+    score_class_volume_pivot,
+) = build_score_class_stability_tables(
+    base_final_with_score_class=base_final_with_score_class,
+    target="def",
+    period_col="year",
+    class_col="score_class",
+)
+
+score_class_stability_summary
+```
+
+```{python}
+score_class_risk_stability_plot_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_class_risk_stability_by_year.png"
+)
+
+fig, ax = plt.subplots(figsize=(10, 5))
+
+for score_class, class_df in score_class_stability_by_year.groupby(
+    "score_class"
+):
+    ax.plot(
+        class_df["year"],
+        class_df["default_rate"],
+        marker="o",
+        linewidth=2,
+        label=f"Class {score_class}",
+    )
+
+ax.set_title("Risk stability: default rate by year and score class")
+ax.set_xlabel("Year")
+ax.set_ylabel("Default rate")
+ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+ax.grid(alpha=0.3)
+ax.legend(ncol=3)
+
+plt.tight_layout()
+fig.savefig(
+    score_class_risk_stability_plot_file,
+    dpi=200,
+    bbox_inches="tight",
+)
+plt.show()
+```
+
+```{python}
+score_class_volume_stability_plot_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_class_volume_stability_by_year.png"
+)
+
+fig, ax = plt.subplots(figsize=(10, 5))
+
+for score_class, class_df in score_class_stability_by_year.groupby(
+    "score_class"
+):
+    ax.plot(
+        class_df["year"],
+        class_df["volume_share"],
+        marker="o",
+        linewidth=2,
+        label=f"Class {score_class}",
+    )
+
+ax.set_title("Volume stability: population share by year and score class")
+ax.set_xlabel("Year")
+ax.set_ylabel("Population share")
+ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+ax.grid(alpha=0.3)
+ax.legend(ncol=3)
+
+plt.tight_layout()
+fig.savefig(
+    score_class_volume_stability_plot_file,
+    dpi=200,
+    bbox_inches="tight",
+)
+plt.show()
+```
+
+## Export scoring outputs
+
+```{python}
+score_output_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_computation_outputs.xlsx"
+)
+base_final_with_score_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "base_final_with_score.csv"
+)
+default_rate_by_vingtile_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "default_rate_by_score_vingtile.csv"
+)
+score_class_table_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_risk_classes.csv"
+)
+base_final_with_score_class_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "base_final_with_score_class.csv"
+)
+risk_class_summary_csv_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_risk_classes_summary_table.csv"
+)
+score_class_stability_by_year_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_class_stability_by_year.csv"
+)
+score_class_stability_summary_file = (
+    Path(data_output_path)
+    / "model_selection"
+    / "score_class_stability_summary.csv"
+)
+
+base_final_with_score.to_csv(base_final_with_score_file, index=False)
+default_rate_by_vingtile.to_csv(default_rate_by_vingtile_file, index=False)
+score_class_table.to_csv(score_class_table_file, index=False)
+base_final_with_score_class.to_csv(
+    base_final_with_score_class_file,
+    index=False,
+)
+risk_class_summary_table.to_csv(risk_class_summary_csv_file, index=False)
+score_class_stability_by_year.to_csv(
+    score_class_stability_by_year_file,
+    index=False,
+)
+score_class_stability_summary.to_csv(
+    score_class_stability_summary_file,
+    index=False,
+)
+
+with pd.ExcelWriter(score_output_file, engine="openpyxl") as writer:
+    modality_score_table.to_excel(
+        writer,
+        sheet_name="modality_scores",
+        index=False
+    )
+    variable_contributions.to_excel(
+        writer,
+        sheet_name="variable_contributions",
+        index=False
+    )
+    conditional_density.to_excel(
+        writer,
+        sheet_name="conditional_density",
+        index=False
+    )
+    base_final_with_score.to_excel(
+        writer,
+        sheet_name="base_final_with_score",
+        index=False
+    )
+    default_rate_by_vingtile.to_excel(
+        writer,
+        sheet_name="default_rate_vingtile",
+        index=False
+    )
+    score_class_table.to_excel(
+        writer,
+        sheet_name="score_risk_classes",
+        index=False
+    )
+    base_final_with_score_class.to_excel(
+        writer,
+        sheet_name="base_score_classes",
+        index=False
+    )
+    risk_class_summary_table.to_excel(
+        writer,
+        sheet_name="risk_class_summary",
+        index=False
+    )
+    score_class_stability_by_year.to_excel(
+        writer,
+        sheet_name="class_stability_year",
+        index=False
+    )
+    score_class_stability_summary.to_excel(
+        writer,
+        sheet_name="class_stability_summary",
+        index=False
+    )
+    score_class_risk_pivot.to_excel(
+        writer,
+        sheet_name="risk_stability_pivot",
+        index=False
+    )
+    score_class_volume_pivot.to_excel(
+        writer,
+        sheet_name="volume_stability_pivot",
+        index=False
+    )
+    for dataset_name, scored_df in scored_datasets.items():
+        scored_df.to_excel(
+            writer,
+            sheet_name=f"scored_{dataset_name.lower()}",
+            index=False
+        )
+
+(
+    score_output_file,
+    base_final_with_score_file,
+    default_rate_by_vingtile_file,
+    score_class_table_file,
+    base_final_with_score_class_file,
+    risk_class_summary_csv_file,
+    score_class_stability_by_year_file,
+    score_class_stability_summary_file,
+)
+```

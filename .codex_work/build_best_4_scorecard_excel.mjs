@@ -19,6 +19,36 @@ const TEXT = "#222222";
 const raw = await fs.readFile(inputPath, "utf8");
 const payload = JSON.parse(raw);
 const rows = payload.scorecard_table;
+const sortedRows = [
+  ...rows
+    .filter((row) => row.variable !== "Intercept")
+    .sort((a, b) => {
+      const variableOrder = Number(a.variable_number) - Number(b.variable_number);
+
+      if (variableOrder !== 0) {
+        return variableOrder;
+      }
+
+      return Number(a.coefficient) - Number(b.coefficient);
+    }),
+  ...rows.filter((row) => row.variable === "Intercept"),
+];
+const maxCoefficientByVariable = {};
+
+for (const row of rows) {
+  if (row.variable === "Intercept") {
+    continue;
+  }
+
+  const coefficient = Number(row.coefficient);
+  maxCoefficientByVariable[row.variable] = Math.max(
+    maxCoefficientByVariable[row.variable] ?? Number.NEGATIVE_INFINITY,
+    coefficient,
+  );
+}
+
+const scoreDenominator = Object.values(maxCoefficientByVariable)
+  .reduce((sum, value) => sum + value, 0);
 
 const variableLabels = {
   loan_int_rate_dis: "loan_int_rate",
@@ -29,14 +59,14 @@ const variableLabels = {
 
 const modalityLabels = {
   loan_int_rate_dis: {
-    "1": "(5.419, 9.91]",
+    "1": "(12.21, 21.825]",
     "2": "(9.91, 12.21]",
-    "3": "(12.21, 21.825]",
+    "3": "(5.419, 9.91]",
   },
   loan_percent_income_dis: {
-    "1": "(-0.001, 0.11]",
+    "1": "(0.2, 0.44]",
     "2": "(0.11, 0.2]",
-    "3": "(0.2, 0.44]",
+    "3": "(-0.001, 0.11]",
   },
   cb_person_default_on_file: {
     N: "N",
@@ -82,6 +112,18 @@ function coefDisplay(row) {
   return `${coefficient.toFixed(12)} (${coefficientName(row)})`;
 }
 
+function scoreDisplay(row) {
+  if (row.variable === "Intercept") {
+    return "";
+  }
+
+  const coefficient = Number(row.coefficient);
+  const maxCoefficient = maxCoefficientByVariable[row.variable];
+  const score = 1000 * Math.abs(coefficient - maxCoefficient) / scoreDenominator;
+
+  return Number(score.toFixed(2));
+}
+
 function rowHeightForVariable(variable) {
   if (variable.length > 28) {
     return 54;
@@ -94,7 +136,7 @@ const workbook = Workbook.create();
 const sheet = workbook.worksheets.add("Score computation");
 sheet.showGridLines = false;
 
-sheet.getRange("A1:D1").merge();
+sheet.getRange("A1:E1").merge();
 sheet.getRange("A1").values = [["The score is computed as follows based on 4 variables:"]];
 sheet.getRange("A1").format = {
   fill: WHITE,
@@ -103,8 +145,8 @@ sheet.getRange("A1").format = {
   verticalAlignment: "middle",
 };
 
-sheet.getRange("A3:D3").values = [["#", "Variable", "Modality", "Coeff"]];
-sheet.getRange("A3:D3").format = {
+sheet.getRange("A3:E3").values = [["#", "Variable", "Modality", "Coeff", "Score"]];
+sheet.getRange("A3:E3").format = {
   fill: RED,
   font: { bold: true, color: WHITE, size: 12 },
   horizontalAlignment: "center",
@@ -112,18 +154,19 @@ sheet.getRange("A3:D3").format = {
   borders: { preset: "all", style: "thin", color: WHITE },
 };
 
-const tableRows = rows.map((row) => [
+const tableRows = sortedRows.map((row) => [
   row.variable_number,
   variableDisplay(row.variable),
   modalityDisplay(row),
   coefDisplay(row),
+  scoreDisplay(row),
 ]);
 
 const firstDataRow = 4;
 const lastDataRow = firstDataRow + tableRows.length - 1;
-sheet.getRangeByIndexes(firstDataRow - 1, 0, tableRows.length, 4).values = tableRows;
+sheet.getRangeByIndexes(firstDataRow - 1, 0, tableRows.length, 5).values = tableRows;
 
-sheet.getRange(`A${firstDataRow}:D${lastDataRow}`).format = {
+sheet.getRange(`A${firstDataRow}:E${lastDataRow}`).format = {
   font: { color: TEXT, size: 11 },
   verticalAlignment: "middle",
   wrapText: true,
@@ -131,13 +174,13 @@ sheet.getRange(`A${firstDataRow}:D${lastDataRow}`).format = {
 };
 
 for (let rowIndex = firstDataRow; rowIndex <= lastDataRow; rowIndex += 1) {
-  const values = sheet.getRange(`A${rowIndex}:D${rowIndex}`).values[0];
+  const values = sheet.getRange(`A${rowIndex}:E${rowIndex}`).values[0];
   const variable = String(values[1] ?? "");
   const isIntercept = variable === "Intercept";
   const fill = rowIndex % 2 === 0 ? LIGHT_GRAY : MID_GRAY;
 
-  sheet.getRange(`A${rowIndex}:D${rowIndex}`).format.fill = isIntercept ? RED : fill;
-  sheet.getRange(`A${rowIndex}:D${rowIndex}`).format.rowHeightPx = isIntercept
+  sheet.getRange(`A${rowIndex}:E${rowIndex}`).format.fill = isIntercept ? RED : fill;
+  sheet.getRange(`A${rowIndex}:E${rowIndex}`).format.rowHeightPx = isIntercept
     ? 34
     : rowHeightForVariable(variable);
 
@@ -158,7 +201,7 @@ for (let rowIndex = firstDataRow; rowIndex <= lastDataRow; rowIndex += 1) {
     borders: { preset: "all", style: "thin", color: WHITE },
   };
 
-  sheet.getRange(`C${rowIndex}:D${rowIndex}`).format = {
+  sheet.getRange(`C${rowIndex}:E${rowIndex}`).format = {
     fill: isIntercept ? MID_GRAY : fill,
     font: { bold: false, color: TEXT, size: 11 },
     horizontalAlignment: "center",
@@ -178,6 +221,13 @@ for (let rowIndex = firstDataRow; rowIndex <= lastDataRow; rowIndex += 1) {
       borders: { preset: "all", style: "thin", color: WHITE },
     };
     sheet.getRange(`D${rowIndex}`).format = {
+      fill: MID_GRAY,
+      font: { bold: false, color: TEXT, size: 11 },
+      horizontalAlignment: "center",
+      verticalAlignment: "middle",
+      borders: { preset: "all", style: "thin", color: WHITE },
+    };
+    sheet.getRange(`E${rowIndex}`).format = {
       fill: MID_GRAY,
       font: { bold: false, color: TEXT, size: 11 },
       horizontalAlignment: "center",
@@ -238,6 +288,8 @@ sheet.getRange("A:A").format.columnWidthPx = 78;
 sheet.getRange("B:B").format.columnWidthPx = 270;
 sheet.getRange("C:C").format.columnWidthPx = 370;
 sheet.getRange("D:D").format.columnWidthPx = 360;
+sheet.getRange("E:E").format.columnWidthPx = 130;
+sheet.getRange(`E${firstDataRow}:E${lastDataRow}`).format.numberFormat = "0.00";
 sheet.getRange("3:3").format.rowHeightPx = 34;
 sheet.freezePanes.freezeRows(3);
 
@@ -290,10 +342,10 @@ meta.freezePanes.freezeRows(3);
 
 const inspect = await workbook.inspect({
   kind: "table",
-  range: `Score computation!A1:D${lastDataRow}`,
+  range: `Score computation!A1:E${lastDataRow}`,
   include: "values,formulas",
   tableMaxRows: 30,
-  tableMaxCols: 4,
+  tableMaxCols: 5,
 });
 console.log(inspect.ndjson);
 
